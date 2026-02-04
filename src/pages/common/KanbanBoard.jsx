@@ -7,30 +7,55 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
 
   // ドラッグ開始
   const onDragStart = (e, taskId) => {
-    e.dataTransfer.setData('taskId', taskId);
+    // IDを文字列として保存（FirestoreのドキュメントIDに対応するため）
+    e.dataTransfer.setData('taskId', taskId.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  // ドロップ領域に入った時
+  const onDragOver = (e, status) => {
+    // デフォルト動作（ドロップ拒否）をキャンセルすることでドロップを許可する
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStatus !== status) {
+      setDragOverStatus(status);
+    }
+  };
+
+  // ドロップ領域から離れた時
+  const onDragLeave = () => {
+    setDragOverStatus(null);
   };
 
   // ドロップ処理
   const onDrop = (e, targetStatus) => {
     e.preventDefault();
-    const taskId = parseInt(e.dataTransfer.getData('taskId'));
+    const taskId = e.dataTransfer.getData('taskId');
     setDragOverStatus(null);
-    onTaskUpdate(taskId, { status: targetStatus });
+
+    if (taskId) {
+      // 親コンポーネント（App.jsx）の handleTaskUpdate を呼び出す
+      onTaskUpdate(taskId, { status: targetStatus });
+    }
   };
 
   return (
-    <div className="h-[calc(100vh-250px)] flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+    // 親コンテナ: 枠線の見切れ防止(p-2)とスナップスクロール
+    <div className="h-[calc(100vh-250px)] flex gap-6 overflow-x-auto pb-8 pt-2 px-2 no-scrollbar snap-x snap-mandatory">
       {Object.values(TASK_STATUS).map(status => (
         <div key={status} 
-          onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
-          onDragLeave={() => setDragOverStatus(null)}
+          onDragOver={(e) => onDragOver(e, status)}
+          onDragLeave={onDragLeave}
           onDrop={(e) => onDrop(e, status)}
-          className={`flex-1 min-w-[320px] rounded-[2rem] p-4 transition-all duration-300 ${
-            dragOverStatus === status ? 'bg-blue-100/50 ring-2 ring-blue-400' : 'bg-gray-100/50'
+          // ring-inset を使用して枠線を内側に描画。見切れを完全に防止。
+          className={`flex-1 min-w-[85vw] sm:min-w-[320px] snap-center rounded-[2rem] p-4 transition-all duration-300 ${
+            dragOverStatus === status 
+              ? 'bg-blue-100/50 ring-4 ring-[#284db3] ring-inset' 
+              : 'bg-gray-100/50'
           }`}
         >
           <div className="flex justify-between items-center mb-4 px-2">
-            <h4 className="font-black text-xs uppercase tracking-widest text-gray-500">{status}</h4>
+            <h4 className="font-black text-[10px] sm:text-xs uppercase tracking-widest text-gray-500">{status}</h4>
             <span className="bg-white px-2 py-1 rounded-lg text-[10px] font-black text-gray-400 border shadow-sm">
               {tasks.filter(t => t.status === status).length}
             </span>
@@ -41,34 +66,34 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
               <div key={task.id} 
                 draggable 
                 onDragStart={(e) => onDragStart(e, task.id)}
-                onClick={() => onTaskUpdate(task.id, null, task)} // 編集モーダルを開く想定
-                className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 hover:shadow-xl hover:border-blue-200 transition-all cursor-grab active:cursor-grabbing group"
+                onClick={() => onTaskUpdate(task.id, null, task)}
+                className="bg-white p-4 sm:p-5 rounded-[1.5rem] shadow-sm border border-gray-100 hover:shadow-xl hover:border-blue-200 transition-all cursor-grab active:cursor-grabbing group"
               >
                 <div className="flex justify-between items-start mb-3">
-                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full" 
+                  <span className="text-[8px] sm:text-[9px] font-black uppercase px-2 py-0.5 rounded-full" 
                     style={{ backgroundColor: `${BRAND_COLORS.BLUE}10`, color: BRAND_COLORS.BLUE }}>
                     {task.category}
                   </span>
                   <GripVertical size={14} className="text-gray-200 group-hover:text-gray-400"/>
                 </div>
-                <h5 className="font-bold text-sm text-gray-800 leading-snug mb-4 group-hover:text-blue-700">
+                <h5 className="font-bold text-xs sm:text-sm text-gray-800 leading-snug mb-4 group-hover:text-[#284db3]">
                   {task.title}
                 </h5>
-                <div className="flex justify-between items-center pt-3 border-t border-gray-50 text-[10px] font-bold text-gray-400">
+                <div className="flex justify-between items-center pt-3 border-t border-gray-50 text-[9px] sm:text-[10px] font-bold text-gray-400">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 flex items-center justify-center text-white text-[8px]">
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#284db3] flex items-center justify-center text-white text-[8px]">
                       {task.assignee ? task.assignee[0] : '?'}
                     </div>
-                    {task.assignee}
+                    <span className="truncate max-w-[80px] sm:max-w-none">{task.assignee}</span>
                   </div>
-                  <div className="flex items-center gap-1"><CalendarDays size={12}/>{task.dueDate}</div>
+                  <div className="flex items-center gap-1 shrink-0"><CalendarDays size={12}/>{task.dueDate}</div>
                 </div>
               </div>
             ))}
 
             <button 
               onClick={() => onAddTaskClick(status)}
-              className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[1.5rem] text-gray-400 hover:bg-white hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[1.5rem] text-gray-400 hover:bg-white hover:border-[#284db3] hover:text-[#284db3] transition-all flex items-center justify-center gap-2"
             >
               <Plus size={18} /> <span className="text-xs font-bold">タスクを追加</span>
             </button>
