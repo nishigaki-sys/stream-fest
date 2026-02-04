@@ -1,8 +1,8 @@
 import React from 'react';
 import { Plus, Building2, Wallet, AlertCircle, Layers, MapPin } from 'lucide-react';
-import { BRAND_COLORS, INITIAL_BUDGETS } from '../../constants/appConfig';
+import { BRAND_COLORS } from '../../constants/appConfig';
 
-// 小規模な共通部品は同ファイル内または components/ui/ に配置
+// 小規模な共通部品
 const StatCard = ({ title, value, subValue, icon: Icon, color, isCurrency = false }) => (
   <div className="p-4 sm:p-5 rounded-2xl border bg-white shadow-sm flex items-start justify-between transition-all hover:shadow-md">
     <div className="min-w-0">
@@ -23,7 +23,7 @@ const ProgressBar = ({ progress, height = "h-2", color = BRAND_COLORS.BLUE }) =>
 );
 
 export default function HQOverview({ events, tasks, budgets, onEventSelect, onAddEvent }) {
-  // 本部画面全体で必要な集計ロジック
+  // 集計ロジック
   const totalPlannedBudget = budgets.reduce((a, c) => a + c.planned, 0);
   const alertTaskCount = tasks.filter(t => t.status !== '完了').length;
 
@@ -43,8 +43,9 @@ export default function HQOverview({ events, tasks, budgets, onEventSelect, onAd
             <Layers size={20} className="text-blue-600" /> プロジェクト一覧
           </h3>
           <button 
+            type="button"
             onClick={onAddEvent}
-            className="bg-blue-600 text-white px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
           >
             <Plus size={16}/>新規作成
           </button>
@@ -67,7 +68,9 @@ export default function HQOverview({ events, tasks, budgets, onEventSelect, onAd
                 return (
                   <tr key={ev.id} onClick={() => onEventSelect(ev.id)} className="hover:bg-blue-50/30 border-b last:border-0 cursor-pointer transition-colors group">
                     <td className="px-6 py-5 font-black text-gray-700 group-hover:text-blue-700">{ev.name}</td>
-                    <td className="px-6 py-5 text-sm text-gray-500 flex items-center gap-1"><MapPin size={14}/>{ev.location}</td>
+                    <td className="px-6 py-5 text-sm text-gray-500">
+                      <div className="flex items-center gap-1"><MapPin size={14}/>{ev.location}</div>
+                    </td>
                     <td className="px-6 py-5 w-64"><ProgressBar progress={ev.progress} /></td>
                     <td className="px-6 py-5 text-right font-bold text-sm text-gray-600">¥{actualSpend.toLocaleString()}</td>
                   </tr>
