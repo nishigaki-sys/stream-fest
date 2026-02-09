@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2,
   Menu, X, ChevronRight, TrendingUp, Layers, CalendarDays,
   Wallet, Kanban as KanbanIcon, Lock, Mail, LogIn,
-  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle
+  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, Settings, MessageSquare
 } from 'lucide-react';
 
 // Firebase SDK & Config
@@ -26,6 +26,7 @@ import HQMemberManagement from './pages/hq/HQMemberManagement';
 import KanbanBoard from './pages/common/KanbanBoard';
 import GanttChart from './pages/common/GanttChart'; 
 import BudgetTable from './pages/common/BudgetTable';
+import ChatView from './pages/common/ChatView';
 
 const db = getFirestore();
 
@@ -66,9 +67,12 @@ export default function App() {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isEventDeleteConfirmOpen, setIsEventDeleteConfirmOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isTaskDeleteConfirmOpen, setIsTaskDeleteConfirmOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  
   const [editingItem, setEditingItem] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
+  const [taskToDelete, setTaskToDelete] = useState(null);
   const [isNewTaskMode, setIsNewTaskMode] = useState(false);
 
   const fontStyle = { fontFamily: '"LINE Seed JP", sans-serif' };
@@ -99,11 +103,10 @@ export default function App() {
         setCurrentUser(profile);
         setIsLoggedIn(true);
 
-        // 主催者の場合は自動的に担当プロジェクトを選択状態にする
         if (profile.role === ROLES.HOST && profile.eventId) {
           setSelectedEventId(profile.eventId);
           setActiveTab('event-dashboard');
-        } else if (profile.role === ROLES.HQ) {
+        } else if (profile.role === ROLES.HQ && !selectedEventId) {
           setActiveTab('hq-overview');
         }
       } else {
@@ -172,6 +175,7 @@ export default function App() {
       }
       setIsEventModalOpen(false);
       setEditingItem(null);
+      if (activeTab === 'event-settings') setActiveTab('event-dashboard');
     } catch (err) { console.error(err); }
   };
 
@@ -185,7 +189,9 @@ export default function App() {
       const budgetSnap = await getDocs(query(collection(db, "budgets"), where("eventId", "==", eventToDelete.id)));
       budgetSnap.forEach(d => batch.delete(d.ref));
       await batch.commit();
-      if (selectedEventId === eventToDelete.id) { setSelectedEventId(null); setActiveTab('hq-overview'); }
+      
+      setSelectedEventId(null);
+      setActiveTab('hq-overview');
       setIsEventDeleteConfirmOpen(false);
       setEventToDelete(null);
     } catch (err) { console.error(err); }
@@ -213,6 +219,17 @@ export default function App() {
         await addDoc(collection(db, "tasks"), taskData);
       }
       setIsTaskModalOpen(false);
+      setEditingItem(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+    try {
+      await deleteDoc(doc(db, "tasks", taskToDelete.id));
+      setIsTaskDeleteConfirmOpen(false);
+      setIsTaskModalOpen(false);
+      setTaskToDelete(null);
       setEditingItem(null);
     } catch (err) { console.error(err); }
   };
@@ -248,7 +265,7 @@ export default function App() {
 
       {/* サイドバー */}
       <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 transform lg:relative lg:translate-x-0 flex flex-col text-white ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
-        <div className="p-8 border-b border-white/10 flex items-center justify-between">
+        <div className="p-8 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-transparent rounded-xl flex items-center justify-center overflow-hidden p-1">
               <img src="/STREAM_FESTアイコン.png" alt="Logo" className="w-full h-full object-contain" />
@@ -261,13 +278,11 @@ export default function App() {
         <nav className="flex-1 p-6 space-y-2 overflow-y-auto no-scrollbar">
           {isHQ && (
             <>
-              {/* プロジェクト全体ボタン */}
               <button onClick={() => { setActiveTab('hq-overview'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-overview' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <LayoutDashboard size={20}/><span>プロジェクト全体</span>
               </button>
 
-              {/* 地域を選択ドロップダウン */}
               <div className="py-2">
                 <select className="w-full bg-white/10 border-none rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-white text-white appearance-none cursor-pointer" 
                   value={selectedEventId || ''} onChange={e => handleEventSelect(e.target.value)}>
@@ -276,7 +291,6 @@ export default function App() {
                 </select>
               </div>
 
-              {/* メンバー管理ボタン */}
               <button onClick={() => { setActiveTab('hq-members'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-members' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <Users size={20}/><span>メンバー管理</span>
@@ -286,16 +300,21 @@ export default function App() {
 
           <div className="pt-8 pb-3 px-5 text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Project Menu</div>
 
-          {/* プロジェクト管理メニュー (権限チェックあり) */}
           {[
             { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
             { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
             { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
             { id: 'budget', icon: Wallet, label: '予算管理' },
+            { id: 'chat', icon: MessageSquare, label: 'チャット' },
+            { id: 'event-settings', icon: Settings, label: 'プロジェクト設定' },
           ].map(item => {
             const canSee = isHQ ? !!selectedEventId : (currentUser?.eventId === selectedEventId && !!selectedEventId);
             return canSee && (
-              <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }} 
+              <button key={item.id} onClick={() => { 
+                  setActiveTab(item.id); 
+                  if(item.id === 'event-settings') setEditingItem(selectedEvent);
+                  setIsSidebarOpen(false); 
+                }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <item.icon size={20}/><span>{item.label}</span>
               </button>
@@ -303,15 +322,15 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-6 border-t border-white/10 bg-[#284db3]/50">
+        <div className="p-6 border-t border-white/10 bg-[#284db3]/50 shrink-0">
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-5 py-4 text-white/70 font-bold hover:text-white hover:bg-white/10 rounded-xl transition-all">
             <LogIn className="rotate-180" size={20}/><span>ログアウト</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto relative z-10 bg-gray-50">
-        <header className="bg-white/80 backdrop-blur-md border-b h-16 sm:h-20 flex items-center justify-between px-4 sm:px-10 sticky top-0 z-30">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative z-10 bg-gray-50">
+        <header className="bg-white/80 backdrop-blur-md border-b h-16 sm:h-20 flex items-center justify-between px-4 sm:px-10 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full"><Menu size={24} /></button>
             <div className="relative max-w-xs sm:max-w-md w-full">
@@ -334,82 +353,128 @@ export default function App() {
           </div>
         </header>
 
-        <div className="p-4 sm:p-10 max-w-7xl mx-auto w-full pb-32">
-          <div className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 sm:mb-3">
-                <span>{isHQ ? 'HQ Access' : 'Host Portal'}</span>
-                <ChevronRight size={14}/>
-                <span className="text-[#284db3] truncate max-w-[150px]">{activeTab.replace('-', ' ')}</span>
+        <div className="flex-1 overflow-y-auto no-scrollbar relative">
+          <div className="p-4 sm:p-10 max-w-7xl mx-auto w-full pb-32">
+            <div className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 sm:mb-3">
+                  <span>{isHQ ? 'HQ Access' : 'Host Portal'}</span>
+                  <ChevronRight size={14}/>
+                  <span className="text-[#284db3] truncate max-w-[150px]">{activeTab.replace('-', ' ')}</span>
+                </div>
+                <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 leading-tight">{selectedEvent?.name || 'プロジェクト全体'}</h2>
               </div>
-              <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 leading-tight">{selectedEvent?.name || 'プロジェクト全体'}</h2>
             </div>
-            {selectedEventId && isHQ && (
-              <button 
-                onClick={() => { setEventToDelete(selectedEvent); setIsEventDeleteConfirmOpen(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-xl text-[10px] sm:text-xs font-black hover:bg-red-500 hover:text-white transition-all shadow-sm"
-              >
-                <Trash2 size={14}/> プロジェクトを削除
-              </button>
-            )}
-          </div>
 
-          {activeTab === 'event-dashboard' && dashboardData && (
-            <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-500">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard title="プロジェクト進捗" value={`${dashboardData.progress}%`} icon={TrendingUp} color={BRAND_COLORS.BLUE} />
-                <StatCard title="タスク完了数" value={dashboardData.taskStats} subValue="完了/全タスク" icon={ListTodo} color={BRAND_COLORS.ORANGE} />
-                <StatCard title="予算執行額" value={dashboardData.budgetSpend} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
-                <StatCard title="予算消化率" value={dashboardData.budgetProgress} icon={CheckCircle2} color={BRAND_COLORS.RED} />
-              </div>
+            {activeTab === 'event-dashboard' && dashboardData && (
+              <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-500">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <StatCard title="プロジェクト進捗" value={`${dashboardData.progress}%`} icon={TrendingUp} color={BRAND_COLORS.BLUE} />
+                  <StatCard title="タスク完了数" value={dashboardData.taskStats} subValue="完了/全タスク" icon={ListTodo} color={BRAND_COLORS.ORANGE} />
+                  <StatCard title="予算執行額" value={dashboardData.budgetSpend} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
+                  <StatCard title="予算消化率" value={dashboardData.budgetProgress} icon={CheckCircle2} color={BRAND_COLORS.RED} />
+                </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-                <div className="lg:col-span-2 bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm p-6 sm:p-8">
-                  <h3 className="font-black text-base sm:text-lg flex items-center gap-3 text-gray-800 mb-6 sm:mb-8">
-                    <ListTodo size={22} className="text-[#284db3]"/> あなたのタスク
-                  </h3>
-                  {dashboardData.myTasks.length > 0 ? (
-                    <div className="space-y-3 sm:space-y-4">
-                      {dashboardData.myTasks.map(task => (
-                        <div key={task.id} 
-                          onClick={() => { handleTaskUpdate(task.id, null, task); }}
-                          className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
-                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                            <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-sm sm:text-base text-gray-800 truncate group-hover:text-[#284db3] transition-colors">{task.title}</h4>
-                              <div className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                <span className="truncate max-w-[80px]">{task.category}</span>
-                                <span className="flex items-center gap-1 whitespace-nowrap"><CalendarDays size={10}/> {task.dueDate}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+                  <div className="lg:col-span-2 bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm p-6 sm:p-8">
+                    <h3 className="font-black text-base sm:text-lg flex items-center gap-3 text-gray-800 mb-6 sm:mb-8">
+                      <ListTodo size={22} className="text-[#284db3]"/> あなたのタスク
+                    </h3>
+                    {dashboardData.myTasks.length > 0 ? (
+                      <div className="space-y-3 sm:space-y-4">
+                        {dashboardData.myTasks.map(task => (
+                          <div key={task.id} 
+                            onClick={() => { handleTaskUpdate(task.id, null, task); }}
+                            className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
+                            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                              <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-sm sm:text-base text-gray-800 truncate group-hover:text-[#284db3] transition-colors">{task.title}</h4>
+                                <div className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                  <span className="truncate max-w-[80px]">{task.category}</span>
+                                  <span className="flex items-center gap-1 whitespace-nowrap"><CalendarDays size={10}/> {task.dueDate}</span>
+                                </div>
                               </div>
                             </div>
+                            <span className="text-[8px] sm:text-[10px] font-black px-2 py-0.5 sm:py-1 rounded-lg bg-orange-50 text-orange-500 uppercase shrink-0 ml-2">{task.status}</span>
                           </div>
-                          <span className="text-[8px] sm:text-[10px] font-black px-2 py-0.5 sm:py-1 rounded-lg bg-orange-50 text-orange-500 uppercase shrink-0 ml-2">{task.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-10 text-center text-gray-400 font-bold text-sm">対応が必要なタスクはありません。</div>
-                  )}
-                </div>
-                <div className="bg-gradient-to-br from-[#284db3] to-blue-500 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-xl shadow-blue-100">
-                  <h4 className="font-black text-lg mb-2">Project Message</h4>
-                  <p className="text-white/80 text-xs sm:text-sm leading-relaxed mb-6 font-medium">ステータスの更新を忘れずに行ってください。</p>
-                  <button onClick={() => setActiveTab('kanban')} className="w-full bg-white text-[#284db3] py-3 sm:py-4 rounded-2xl font-black text-xs sm:text-sm hover:shadow-lg transition-all active:scale-95">カンバンを開く</button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-10 text-center text-gray-400 font-bold text-sm">対応が必要なタスクはありません。</div>
+                    )}
+                  </div>
+                  <div className="bg-gradient-to-br from-[#284db3] to-blue-500 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-xl shadow-blue-100">
+                    <h4 className="font-black text-lg mb-2">Project Message</h4>
+                    <p className="text-white/80 text-xs sm:text-sm leading-relaxed mb-6 font-medium">ステータスの更新を忘れずに行ってください。</p>
+                    <button onClick={() => setActiveTab('kanban')} className="w-full bg-white text-[#284db3] py-3 sm:py-4 rounded-2xl font-black text-xs sm:text-sm hover:shadow-lg transition-all active:scale-95">カンバンを開く</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeTab === 'hq-overview' && <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={handleEventSelect} onAddEvent={() => { setEditingItem({ name: '', location: '', hostName: currentUser?.name || '' }); setIsEventModalOpen(true); }} />}
-          {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} />}
-          {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setIsNewTaskMode(false); setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
-          {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => { handleTaskUpdate(task.id, null, task); }} />}
-          {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
+            {activeTab === 'hq-overview' && <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={handleEventSelect} onAddEvent={() => { setEditingItem({ name: '', location: '', hostName: currentUser?.name || '' }); setIsEventModalOpen(true); }} />}
+            {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} />}
+            {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setIsNewTaskMode(false); setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
+            {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => { handleTaskUpdate(task.id, null, task); }} />}
+            {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
+            
+            {activeTab === 'chat' && (
+              <ChatView 
+                currentUser={currentUser} 
+                users={users} 
+                selectedEventId={selectedEventId} 
+              />
+            )}
+
+            {activeTab === 'event-settings' && selectedEvent && (
+              <div className="max-w-2xl bg-white rounded-[2.5rem] border shadow-sm p-8 sm:p-12 animate-in fade-in slide-in-from-bottom-4">
+                <h3 className="text-xl font-black text-gray-800 mb-8 flex items-center gap-3">
+                  <Settings className="text-[#284db3]" /> プロジェクトの基本設定
+                </h3>
+                <form onSubmit={handleSaveEvent} className="space-y-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">プロジェクト名</label>
+                    <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
+                      value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催場所</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
+                      <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
+                        value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催日 (開始予定)</label>
+                      <input type="date" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
+                        value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">主催者名</label>
+                      <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
+                        value={editingItem?.hostName || ''} onChange={e=>setEditingItem({...editingItem, hostName: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="pt-6 border-t flex flex-col sm:flex-row justify-between gap-4">
+                    <button type="button" onClick={() => { setEventToDelete(selectedEvent); setIsEventDeleteConfirmOpen(true); }}
+                      className="flex items-center justify-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all">
+                      <Trash2 size={16}/> プロジェクトを完全に削除
+                    </button>
+                    <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:shadow-blue-100 transition-all">
+                      設定を保存する
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
-      {/* モーダル群 (省略なし) */}
+      {/* モーダル群 */}
       {isEventDeleteConfirmOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
@@ -427,11 +492,27 @@ export default function App() {
         </div>
       )}
 
+      {isTaskDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">タスクの削除</h3>
+            <p className="text-sm sm:text-base text-gray-500 mb-8">
+              タスク「<span className="font-bold text-gray-900">{taskToDelete?.title}</span>」を削除しますか？
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={() => setIsTaskDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
+              <button onClick={confirmDeleteTask} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isEventModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
             <form onSubmit={handleSaveEvent}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30">
+              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
                 <h3 className="font-black text-lg sm:text-xl text-gray-800">プロジェクトの新規作成</h3>
                 <button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
               </div>
@@ -523,8 +604,19 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-                <button type="button" onClick={()=>{setIsTaskModalOpen(false); setIsNewTaskMode(false);}} className="px-8 py-4 font-bold text-gray-400">閉じる</button>
+              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 sticky bottom-0">
+                <div className="flex gap-3">
+                  {editingItem?.id && (
+                    <button 
+                      type="button" 
+                      onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }}
+                      className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"
+                    >
+                      <Trash2 size={16}/> 削除
+                    </button>
+                  )}
+                  <button type="button" onClick={()=>{setIsTaskModalOpen(false); setIsNewTaskMode(false);}} className="px-8 py-4 font-bold text-gray-400">閉じる</button>
+                </div>
                 <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">保存する</button>
               </div>
             </form>
@@ -536,7 +628,7 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
             <form onSubmit={handleSaveBudget}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30">
+              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
                 <h3 className="font-black text-lg sm:text-xl text-gray-800">予算項目の設定</h3>
                 <button type="button" onClick={() => setIsBudgetModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
               </div>
