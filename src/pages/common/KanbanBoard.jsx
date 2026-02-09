@@ -5,16 +5,12 @@ import { TASK_STATUS, BRAND_COLORS } from '../../constants/appConfig';
 export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTaskClick }) {
   const [dragOverStatus, setDragOverStatus] = useState(null);
 
-  // ドラッグ開始
   const onDragStart = (e, taskId) => {
-    // IDを文字列として保存（FirestoreのドキュメントIDに対応するため）
     e.dataTransfer.setData('taskId', taskId.toString());
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  // ドロップ領域に入った時
   const onDragOver = (e, status) => {
-    // デフォルト動作（ドロップ拒否）をキャンセルすることでドロップを許可する
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverStatus !== status) {
@@ -22,33 +18,34 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
     }
   };
 
-  // ドロップ領域から離れた時
   const onDragLeave = () => {
     setDragOverStatus(null);
   };
 
-  // ドロップ処理
   const onDrop = (e, targetStatus) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('taskId');
     setDragOverStatus(null);
 
     if (taskId) {
-      // 親コンポーネント（App.jsx）の handleTaskUpdate を呼び出す
       onTaskUpdate(taskId, { status: targetStatus });
     }
   };
 
   return (
-    // 親コンテナ: 枠線の見切れ防止(p-2)とスナップスクロール
-    <div className="h-[calc(100vh-250px)] flex gap-6 overflow-x-auto pb-8 pt-2 px-2 no-scrollbar snap-x snap-mandatory">
+    /* 修正ポイント:
+      1. h-[calc(100vh-250px)] を削除し、高さがコンテンツに応じて伸びるように変更。
+      2. overflow-x-auto を削除し、横スクロールもブラウザ側に任せる。
+      3. flex-col sm:flex-row を維持しつつ、items-start を追加してカラムが不必要に縦に伸びないように調整。
+    */
+    <div className="flex flex-col sm:flex-row gap-6 pb-8 pt-2 px-2 items-start">
       {Object.values(TASK_STATUS).map(status => (
         <div key={status} 
           onDragOver={(e) => onDragOver(e, status)}
           onDragLeave={onDragLeave}
           onDrop={(e) => onDrop(e, status)}
-          // ring-inset を使用して枠線を内側に描画。見切れを完全に防止。
-          className={`flex-1 min-w-[85vw] sm:min-w-[320px] snap-center rounded-[2rem] p-4 transition-all duration-300 ${
+          /* 各カラムの高さも auto にし、中身に応じて伸びるように設定 */
+          className={`flex-1 min-w-full sm:min-w-[320px] sm:max-w-[320px] rounded-[2rem] p-4 transition-all duration-300 ${
             dragOverStatus === status 
               ? 'bg-blue-100/50 ring-4 ring-[#284db3] ring-inset' 
               : 'bg-gray-100/50'

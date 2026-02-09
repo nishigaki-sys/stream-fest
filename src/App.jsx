@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2, AlertCircle,
-  Menu, X, ChevronRight, TrendingUp, Layers, Settings2, CalendarDays,
-  Wallet, Kanban as KanbanIcon, GripVertical, Lock, Mail, LogIn,
-  ArrowLeft, Send, Clock, MapPin, Building2, Pencil, Trash2, Save, Users, Shield, AlertTriangle
+  LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2,
+  Menu, X, ChevronRight, TrendingUp, Layers, CalendarDays,
+  Wallet, Kanban as KanbanIcon, Lock, Mail, LogIn,
+  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle
 } from 'lucide-react';
 
 // Firebase SDK & Config
@@ -22,11 +22,11 @@ import {
 // Page Components
 import LoginPage from './pages/auth/LoginPage';
 import HQOverview from './pages/hq/HQOverview';
+import HQMemberManagement from './pages/hq/HQMemberManagement';
 import KanbanBoard from './pages/common/KanbanBoard';
 import GanttChart from './pages/common/GanttChart'; 
 import BudgetTable from './pages/common/BudgetTable';
 
-// DB初期化
 const db = getFirestore();
 
 /**
@@ -48,189 +48,6 @@ const StatCard = ({ title, value, subValue, icon: Icon, color, isCurrency = fals
     </div>
   </div>
 );
-
-/**
- * メンバー管理コンポーネント (HQ専用)
- */
-const HQMemberManagement = ({ users, events, onUpdateUsers }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [userToDelete, setUserToDelete] = useState(null);
-
-  const handleEditClick = (user) => {
-    setEditingUser({ ...user, password: '' });
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteClick = (user) => {
-    setUserToDelete(user);
-    setIsDeleteConfirmOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    try {
-      await deleteDoc(doc(db, "users", userToDelete.id));
-      setIsDeleteConfirmOpen(false);
-      setUserToDelete(null);
-    } catch (e) {
-      console.error("Error deleting user: ", e);
-    }
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    try {
-      if (editingUser.id) {
-        const { password, id, ...userData } = editingUser;
-        if (password) userData.password = password;
-        await updateDoc(doc(db, "users", id), userData);
-      } else {
-        await addDoc(collection(db, "users"), editingUser);
-      }
-      setIsModalOpen(false);
-      setEditingUser(null);
-    } catch (e) {
-      console.error("Error saving user: ", e);
-    }
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h3 className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-3">
-          <Shield className="text-[#284db3]" /> メンバー・権限管理
-        </h3>
-        <button 
-          onClick={() => { setEditingUser({ name: '', email: '', role: ROLES.HOST, eventId: null, password: '' }); setIsModalOpen(true); }}
-          className="w-full sm:w-auto bg-[#284db3] text-white px-6 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-        >
-          <Users size={20}/> メンバー招待
-        </button>
-      </div>
-
-      <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50/50 text-[10px] font-black uppercase text-gray-400 border-b">
-              <tr>
-                <th className="px-4 sm:px-8 py-5">名前</th>
-                <th className="hidden md:table-cell px-8 py-5">メール</th>
-                <th className="px-4 sm:px-8 py-5">役割</th>
-                <th className="hidden sm:table-cell px-8 py-5">担当プロジェクト</th>
-                <th className="px-4 sm:px-8 py-5 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr key={user.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 sm:px-8 py-4 sm:py-6">
-                    <div className="font-bold text-gray-700">{user.name}</div>
-                    <div className="md:hidden text-[10px] text-gray-400">{user.email}</div>
-                  </td>
-                  <td className="hidden md:table-cell px-8 py-6 text-sm text-gray-500">
-                    <div className="flex items-center gap-2"><Mail size={14}/> {user.email}</div>
-                  </td>
-                  <td className="px-4 sm:px-8 py-6">
-                    <span className="px-2 py-1 rounded-lg text-[9px] sm:text-[10px] font-black uppercase" 
-                      style={{ backgroundColor: user.role === ROLES.HQ ? '#284db315' : '#f3f4f6', color: user.role === ROLES.HQ ? '#284db3' : '#6b7280' }}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="hidden sm:table-cell px-8 py-6 text-sm font-bold text-gray-500">
-                    {user.eventId ? events.find(e => e.id === user.eventId)?.name : '未割当（全体）'}
-                  </td>
-                  <td className="px-4 sm:px-8 py-6 text-right">
-                    <div className="flex justify-end gap-1 sm:gap-2">
-                      <button onClick={() => handleEditClick(user)} className="p-2 text-gray-400 hover:text-[#284db3] transition-colors">
-                        <Pencil size={18}/>
-                      </button>
-                      <button onClick={() => handleDeleteClick(user)} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
-                        <Trash2 size={18}/>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSave}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                <h3 className="font-black text-lg sm:text-xl text-gray-800">{editingUser?.id ? 'メンバー情報の編集' : '新規メンバー招待'}</h3>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
-              </div>
-              <div className="p-6 sm:p-10 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">名前</label>
-                  <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                    value={editingUser?.name || ''} onChange={e => setEditingUser({...editingUser, name: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">メールアドレス</label>
-                  <input required type="email" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                    value={editingUser?.email || ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">{editingUser?.id ? 'パスワード (変更時のみ)' : '初期パスワード'}</label>
-                  <div className="relative">
-                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-                    <input required={!editingUser?.id} type="text" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                      placeholder="6文字以上" value={editingUser?.password || ''} onChange={e => setEditingUser({...editingUser, password: e.target.value})} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">役割</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingUser?.role || ''} onChange={e => setEditingUser({...editingUser, role: e.target.value})}>
-                      {Object.values(ROLES).map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">担当プロジェクト</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingUser?.eventId || ''} onChange={e => setEditingUser({...editingUser, eventId: e.target.value || null})}>
-                      <option value="">全体管理</option>
-                      {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors">キャンセル</button>
-                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2">
-                  <Save size={20}/> 保存する
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6">
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">メンバーの削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8">
-              <span className="font-bold text-gray-800">{userToDelete?.name}</span> さんを削除してもよろしいですか？
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => setIsDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
-              <button onClick={confirmDelete} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -256,6 +73,7 @@ export default function App() {
 
   const fontStyle = { fontFamily: '"LINE Seed JP", sans-serif' };
 
+  // リアルタイムデータ同期
   useEffect(() => {
     const unsubEvents = onSnapshot(collection(db, "events"), (snapshot) => {
       setEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -272,6 +90,7 @@ export default function App() {
     return () => { unsubEvents(); unsubTasks(); unsubBudgets(); unsubUsers(); };
   }, []);
 
+  // 認証 & 権限による初期表示制御
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -279,6 +98,14 @@ export default function App() {
                         { name: user.email.split('@')[0], role: ROLES.HQ, email: user.email };
         setCurrentUser(profile);
         setIsLoggedIn(true);
+
+        // 主催者の場合は自動的に担当プロジェクトを選択状態にする
+        if (profile.role === ROLES.HOST && profile.eventId) {
+          setSelectedEventId(profile.eventId);
+          setActiveTab('event-dashboard');
+        } else if (profile.role === ROLES.HQ) {
+          setActiveTab('hq-overview');
+        }
       } else {
         setIsLoggedIn(false);
         setCurrentUser(null);
@@ -336,11 +163,7 @@ export default function App() {
   const handleSaveEvent = async (e) => {
     e.preventDefault();
     try {
-      const eventData = { 
-        ...editingItem, 
-        status: editingItem.status || '進行中', 
-        progress: editingItem.progress || 0 
-      };
+      const eventData = { ...editingItem, status: editingItem.status || '進行中', progress: editingItem.progress || 0 };
       if (editingItem.id) {
         const { id, ...data } = eventData;
         await updateDoc(doc(db, "events", id), data);
@@ -374,25 +197,15 @@ export default function App() {
       setEditingItem(fullTask);
       setIsTaskModalOpen(true);
     } else if (updates) {
-      try {
-        await updateDoc(doc(db, "tasks", taskId.toString()), updates);
-      } catch (err) {
-        console.error("Task update failed:", err);
-      }
+      try { await updateDoc(doc(db, "tasks", taskId.toString()), updates); }
+      catch (err) { console.error(err); }
     }
   };
 
   const handleSaveTask = async (e) => {
     e.preventDefault();
     try {
-      const taskData = { 
-        ...editingItem, 
-        eventId: selectedEventId,
-        startDate: editingItem.startDate || '',
-        dueDate: editingItem.dueDate || '',
-        assignee: editingItem.assignee || '',
-        status: editingItem.status || TASK_STATUS.TODO
-      };
+      const taskData = { ...editingItem, eventId: selectedEventId, status: editingItem.status || TASK_STATUS.TODO };
       if (editingItem.id) {
         const { id, ...data } = taskData;
         await updateDoc(doc(db, "tasks", id), data);
@@ -433,6 +246,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[40] lg:hidden animate-in fade-in" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
+      {/* サイドバー */}
       <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 transform lg:relative lg:translate-x-0 flex flex-col text-white ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="p-8 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -443,39 +257,52 @@ export default function App() {
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
         </div>
+
         <nav className="flex-1 p-6 space-y-2 overflow-y-auto no-scrollbar">
           {isHQ && (
             <>
+              {/* プロジェクト全体ボタン */}
               <button onClick={() => { setActiveTab('hq-overview'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-overview' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <LayoutDashboard size={20}/><span>プロジェクト全体</span>
               </button>
+
+              {/* 地域を選択ドロップダウン */}
+              <div className="py-2">
+                <select className="w-full bg-white/10 border-none rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-white text-white appearance-none cursor-pointer" 
+                  value={selectedEventId || ''} onChange={e => handleEventSelect(e.target.value)}>
+                  <option value="" disabled className="text-gray-800">地域を選択...</option>
+                  {events.map(ev => <option key={ev.id} value={ev.id} className="text-gray-800">{ev.name}</option>)}
+                </select>
+              </div>
+
+              {/* メンバー管理ボタン */}
               <button onClick={() => { setActiveTab('hq-members'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-members' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <Users size={20}/><span>メンバー管理</span>
               </button>
             </>
           )}
-          <div className="pt-8 pb-3 px-5 text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Project Admin</div>
-          {isHQ && (
-            <select className="w-full bg-white/10 border-none rounded-xl px-4 py-3 text-sm font-bold mb-4 outline-none focus:ring-2 focus:ring-white text-white appearance-none cursor-pointer" 
-              value={selectedEventId || ''} onChange={e => handleEventSelect(e.target.value)}>
-              <option value="" disabled className="text-gray-800">地域を選択...</option>
-              {events.map(ev => <option key={ev.id} value={ev.id} className="text-gray-800">{ev.name}</option>)}
-            </select>
-          )}
+
+          <div className="pt-8 pb-3 px-5 text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Project Menu</div>
+
+          {/* プロジェクト管理メニュー (権限チェックあり) */}
           {[
-            { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード', hide: !selectedEventId },
-            { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード', hide: !selectedEventId },
-            { id: 'tasks', icon: CalendarDays, label: 'ガントチャート', hide: !selectedEventId },
-            { id: 'budget', icon: Wallet, label: '予算管理', hide: !selectedEventId },
-          ].map(item => !item.hide && (
-            <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }} 
-              className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-              <item.icon size={20}/><span>{item.label}</span>
-            </button>
-          ))}
+            { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
+            { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
+            { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
+            { id: 'budget', icon: Wallet, label: '予算管理' },
+          ].map(item => {
+            const canSee = isHQ ? !!selectedEventId : (currentUser?.eventId === selectedEventId && !!selectedEventId);
+            return canSee && (
+              <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }} 
+                className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
+                <item.icon size={20}/><span>{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
+
         <div className="p-6 border-t border-white/10 bg-[#284db3]/50">
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-5 py-4 text-white/70 font-bold hover:text-white hover:bg-white/10 rounded-xl transition-all">
             <LogIn className="rotate-180" size={20}/><span>ログアウト</span>
@@ -575,14 +402,14 @@ export default function App() {
           )}
 
           {activeTab === 'hq-overview' && <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={handleEventSelect} onAddEvent={() => { setEditingItem({ name: '', location: '', hostName: currentUser?.name || '' }); setIsEventModalOpen(true); }} />}
-          {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} onUpdateUsers={setUsers} />}
+          {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} />}
           {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setIsNewTaskMode(false); setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
           {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => { handleTaskUpdate(task.id, null, task); }} />}
           {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
         </div>
       </main>
 
-      {/* モーダル群 */}
+      {/* モーダル群 (省略なし) */}
       {isEventDeleteConfirmOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
