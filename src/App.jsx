@@ -3,7 +3,8 @@ import {
   LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2,
   Menu, X, ChevronRight, TrendingUp, Layers, CalendarDays,
   Wallet, Kanban as KanbanIcon, Lock, Mail, LogIn,
-  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, Settings, MessageSquare, Copy
+  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, 
+  Settings, MessageSquare, Copy, Package
 } from 'lucide-react';
 
 // Firebase SDK & Config
@@ -15,7 +16,8 @@ import { auth } from './config/firebase';
 
 // Constants & マスターデータ
 import { 
-  BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES 
+  BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES,
+  ITEM_CATEGORIES, PROCUREMENT_METHODS, ITEM_STATUS
 } from './constants/appConfig';
 
 // Page Components
@@ -27,11 +29,12 @@ import GanttChart from './pages/common/GanttChart';
 import BudgetTable from './pages/common/BudgetTable';
 import ChatView from './pages/common/ChatView';
 import TaskTable from './pages/common/TaskTable';
+import SuppliesList from './pages/common/SuppliesList';
 
 const db = getFirestore();
 
 /**
- * 共通コンポーネント: 統計カード (KPI用)
+ * 統計カードコンポーネント
  */
 const StatCard = ({ title, value, subValue, icon: Icon, color, isCurrency = false }) => (
   <div className="p-4 sm:p-5 rounded-2xl border bg-white shadow-sm flex items-start justify-between transition-all hover:shadow-md">
@@ -59,20 +62,26 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // データステート
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [users, setUsers] = useState([]);
+  const [supplies, setSupplies] = useState([]);
 
+  // モーダル制御
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isEventDeleteConfirmOpen, setIsEventDeleteConfirmOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTaskDeleteConfirmOpen, setIsTaskDeleteConfirmOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isSuppliesModalOpen, setIsSuppliesModalOpen] = useState(false);
+  const [isSuppliesDeleteConfirmOpen, setIsSuppliesDeleteConfirmOpen] = useState(false);
   
   const [editingItem, setEditingItem] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  const [supplyToDelete, setSupplyToDelete] = useState(null);
   const [isNewTaskMode, setIsNewTaskMode] = useState(false);
 
   const fontStyle = { fontFamily: '"LINE Seed JP", sans-serif' };
@@ -91,7 +100,10 @@ export default function App() {
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    return () => { unsubEvents(); unsubTasks(); unsubBudgets(); unsubUsers(); };
+    const unsubSupplies = onSnapshot(collection(db, "supplies"), (snapshot) => {
+      setSupplies(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => { unsubEvents(); unsubTasks(); unsubBudgets(); unsubUsers(); unsubSupplies(); };
   }, []);
 
   // 認証 & 権限による初期表示制御
@@ -131,6 +143,10 @@ export default function App() {
   const filteredBudgets = useMemo(() => {
     return selectedEventId ? budgets.filter(b => b.eventId === selectedEventId) : budgets;
   }, [budgets, selectedEventId]);
+
+  const filteredSupplies = useMemo(() => {
+    return selectedEventId ? supplies.filter(s => s.eventId === selectedEventId) : [];
+  }, [supplies, selectedEventId]);
 
   const dashboardData = useMemo(() => {
     if (!selectedEventId || !currentUser) return null;
@@ -230,10 +246,9 @@ export default function App() {
     try {
       const batch = writeBatch(db);
       batch.delete(doc(db, "events", eventToDelete.id));
-      const taskSnap = await getDocs(query(collection(db, "tasks"), where("eventId", "==", eventToDelete.id)));
-      taskSnap.forEach(d => batch.delete(d.ref));
-      const budgetSnap = await getDocs(query(collection(db, "budgets"), where("eventId", "==", eventToDelete.id)));
-      budgetSnap.forEach(d => batch.delete(d.ref));
+      (await getDocs(query(collection(db, "tasks"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
+      (await getDocs(query(collection(db, "budgets"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
+      (await getDocs(query(collection(db, "supplies"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
       await batch.commit();
       
       setSelectedEventId(null);
@@ -285,6 +300,32 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  const handleSaveSupply = async (e) => {
+    e.preventDefault();
+    try {
+      const data = { ...editingItem, eventId: selectedEventId };
+      if (editingItem.id) {
+        const { id, ...updateData } = data;
+        await updateDoc(doc(db, "supplies", id), updateData);
+      } else {
+        await addDoc(collection(db, "supplies"), data);
+      }
+      setIsSuppliesModalOpen(false);
+      setEditingItem(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const confirmDeleteSupply = async () => {
+    if (!supplyToDelete) return;
+    try {
+      await deleteDoc(doc(db, "supplies", supplyToDelete.id));
+      setIsSuppliesDeleteConfirmOpen(false);
+      setIsSuppliesModalOpen(false);
+      setSupplyToDelete(null);
+      setEditingItem(null);
+    } catch (err) { console.error(err); }
+  };
+
   const handleSaveBudget = async (e) => {
     e.preventDefault();
     try {
@@ -314,6 +355,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[40] lg:hidden animate-in fade-in" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
+      {/* サイドバー */}
       <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 transform lg:relative lg:translate-x-0 flex flex-col text-white ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="p-8 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -348,11 +390,13 @@ export default function App() {
 
           <div className="pt-8 pb-3 px-5 text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Project Menu</div>
 
+          {/* プロジェクトメニュー配列 */}
           {[
             { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
             { id: 'task-list', icon: ListTodo, label: 'タスク' },
             { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
             { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
+            { id: 'supplies', icon: Package, label: '準備物リスト' },
             { id: 'budget', icon: Wallet, label: '予算管理' },
             { id: 'chat', icon: MessageSquare, label: 'チャット' },
             { id: 'event-settings', icon: Settings, label: 'プロジェクト設定' },
@@ -378,6 +422,7 @@ export default function App() {
         </div>
       </aside>
 
+      {/* メインビュー */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative z-10 bg-gray-50">
         <header className="bg-white/80 backdrop-blur-md border-b h-16 sm:h-20 flex items-center justify-between px-4 sm:px-10 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
@@ -421,6 +466,7 @@ export default function App() {
                   <StatCard title="予算執行額" value={dashboardData.budgetSpend} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
                   <StatCard title="予算消化率" value={dashboardData.budgetProgress} icon={CheckCircle2} color={BRAND_COLORS.RED} />
                 </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                   <div className="lg:col-span-2 bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm p-6 sm:p-8">
                     <h3 className="font-black text-base sm:text-lg flex items-center gap-3 text-gray-800 mb-6 sm:mb-8">
@@ -464,7 +510,29 @@ export default function App() {
             {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} />}
             {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
             {activeTab === 'chat' && <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />}
-
+            {activeTab === 'supplies' && (
+  <SuppliesList 
+    items={filteredSupplies} 
+    users={users} 
+    onAddItemClick={() => {
+      setEditingItem({ 
+        name: '', 
+        description: '', // ★ここを追加
+        category: ITEM_CATEGORIES[0], 
+        method: PROCUREMENT_METHODS[0], 
+        supplier: '', 
+        quantity: '1', 
+        assignee: '', 
+        status: ITEM_STATUS.TODO 
+      });
+      setIsSuppliesModalOpen(true);
+    }} 
+    onEditItemClick={(item) => {
+      setEditingItem(item);
+      setIsSuppliesModalOpen(true);
+    }} 
+  />
+)}
             {activeTab === 'event-settings' && selectedEvent && (
               <div className="max-w-2xl bg-white rounded-[2.5rem] border shadow-sm p-8 sm:p-12 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between items-center mb-8">
@@ -508,7 +576,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* モーダル群 */}
+      {/* モーダル群 (Event / Task / Supplies / Budget) */}
       {isEventDeleteConfirmOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
@@ -536,92 +604,184 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {isSuppliesDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
+            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">準備物の削除</h3>
+            <p className="text-sm sm:text-base text-gray-500 mb-8">「<span className="font-bold text-gray-900">{supplyToDelete?.name}</span>」をリストから削除しますか？</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={() => setIsSuppliesDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
+              <button onClick={confirmDeleteSupply} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isEventModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-        <form onSubmit={handleSaveEvent}>
-        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
-        <h3 className="font-black text-lg sm:text-xl text-gray-800">プロジェクトの新規作成</h3>
-        <button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
+            <form onSubmit={handleSaveEvent}>
+              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">プロジェクトの新規作成</h3><button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button></div>
+              <div className="p-10 space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Project Name</label><input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} placeholder="例: 2026 in 名古屋" /></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Location</label><div className="relative"><MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/><input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} placeholder="会場名" /></div></div></div>
+              <div className="p-8 bg-gray-50 flex justify-end gap-4"><button type="button" onClick={()=>setIsEventModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button><button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">作成する</button></div>
+            </form>
+          </div>
         </div>
-        <div className="p-6 sm:p-10 space-y-6 sm:space-y-8">
-        <div className="space-y-2">
-        <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Project Name</label>
-        <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]"
-        value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} placeholder="例: 2026 in 名古屋" />
-        </div>
-        <div className="space-y-2">
-        <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Location</label>
-        <div className="relative">
-        <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-        <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 sm:py-5 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]"
-        value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} placeholder="会場名" />
-        </div>
-        </div>
-        </div>
-        <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-        <button type="button" onClick={()=>setIsEventModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button>
-        <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">作成する</button>
-        </div>
-        </form>
-        </div>
-        </div>
-        )}
+      )}
 
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSaveTask}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
-                <h3 className="font-black text-lg sm:text-xl text-gray-800">タスクの設定</h3>
-                <button type="button" onClick={() => setIsTaskModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={24}/></button>
+              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">タスクの設定</h3><button type="button" onClick={() => setIsTaskModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={24}/></button></div>
+              <div className="p-10 space-y-6">
+                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Task Name</label><input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" /></div>
+                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">タスクカテゴリ</label><select required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.category || ''} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">担当者</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" value={editingItem?.assignee || ''} onChange={e=>setEditingItem({...editingItem, assignee: e.target.value})}><option value="">未割り当て</option>{users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}</select></div>
+                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" value={editingItem?.status || ''} onChange={e=>setEditingItem({...editingItem, status: e.target.value})}>{Object.values(TASK_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">開始日</label><input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} /></div>
+                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">期日</label><input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm" value={editingItem?.dueDate || ''} onChange={e=>setEditingItem({...editingItem, dueDate: e.target.value})} /></div>
+                </div>
               </div>
-              <div className="p-6 sm:p-10 space-y-6">
+              <div className="p-8 bg-gray-50 flex justify-between gap-4 sticky bottom-0">
+                <div className="flex gap-3">{editingItem?.id && (<button type="button" onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }} className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/> 削除</button>)}<button type="button" onClick={()=>setIsTaskModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">閉じる</button></div>
+                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">保存する</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isSuppliesModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSaveSupply}>
+              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center">
+                <h3 className="font-black text-xl text-gray-800">準備物の設定</h3>
+                <button type="button" onClick={() => setIsSuppliesModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <X size={24}/>
+                </button>
+              </div>
+              <div className="p-10 space-y-6">
+                {/* 詳細名 */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Task Name</label>
-                  <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" />
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">詳細名</label>
+                  <input 
+                    required 
+                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500" 
+                    value={editingItem?.name || ''} 
+                    onChange={e => setEditingItem({...editingItem, name: e.target.value})} 
+                    placeholder="例: 運営マニュアル" 
+                  />
                 </div>
+
+                {/* 詳細内容（追加項目） */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">タスクカテゴリ</label>
-                  <select required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.category || ''} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
-                    <option value="" disabled>カテゴリを選択...</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">詳細内容</label>
+                  <textarea 
+                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500 min-h-[120px] resize-none text-sm" 
+                    value={editingItem?.description || ''} 
+                    onChange={e => setEditingItem({...editingItem, description: e.target.value})} 
+                    placeholder="具体的な内容や備考を自由に入力してください" 
+                  />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+
+                <div className="grid grid-cols-2 gap-6">
+                  {/* カテゴリ選択 */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">担当者</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.assignee || ''} onChange={e=>setEditingItem({...editingItem, assignee: e.target.value})}>
-                      <option value="">未割り当て</option>
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">カテゴリ</label>
+                    <select 
+                      required
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500 text-sm" 
+                      value={editingItem?.category || ''} 
+                      onChange={e => setEditingItem({...editingItem, category: e.target.value})}
+                    >
+                      <option value="" disabled>選択してください</option>
+                      {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  {/* ステータス選択 */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label>
+                    <select 
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" 
+                      value={editingItem?.status || ''} 
+                      onChange={e => setEditingItem({...editingItem, status: e.target.value})}
+                    >
+                      {Object.values(ITEM_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  {/* 手配方法 */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">手配方法</label>
+                    <select 
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" 
+                      value={editingItem?.method || ''} 
+                      onChange={e => setEditingItem({...editingItem, method: e.target.value})}
+                    >
+                      {PROCUREMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  {/* 数量 */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">数量</label>
+                    <input 
+                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none" 
+                      value={editingItem?.quantity || ''} 
+                      onChange={e => setEditingItem({...editingItem, quantity: e.target.value})} 
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+
+                {/* 手配先 / 担当者 */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">手配先 / 担当者</label>
+                  <div className="flex gap-4">
+                    <input 
+                      className="flex-1 bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none" 
+                      placeholder="手配先名" 
+                      value={editingItem?.supplier || ''} 
+                      onChange={e => setEditingItem({...editingItem, supplier: e.target.value})} 
+                    />
+                    <select 
+                      className="flex-1 bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm outline-none" 
+                      value={editingItem?.assignee || ''} 
+                      onChange={e => setEditingItem({...editingItem, assignee: e.target.value})}
+                    >
+                      <option value="">担当者を選択</option>
                       {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.status || ''} onChange={e=>setEditingItem({...editingItem, status: e.target.value})}>
-                      {Object.values(TASK_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開始日</label>
-                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">期日</label>
-                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.dueDate || ''} onChange={e=>setEditingItem({...editingItem, dueDate: e.target.value})} />
-                  </div>
                 </div>
               </div>
-              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 sticky bottom-0">
+
+              <div className="p-8 bg-gray-50 flex justify-between gap-4 sticky bottom-0">
                 <div className="flex gap-3">
                   {editingItem?.id && (
-                    <button type="button" onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }} className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/> 削除</button>
+                    <button 
+                      type="button" 
+                      onClick={() => { setSupplyToDelete(editingItem); setIsSuppliesDeleteConfirmOpen(true); }} 
+                      className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"
+                    >
+                      <Trash2 size={16}/> 削除
+                    </button>
                   )}
-                  <button type="button" onClick={()=>setIsTaskModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">閉じる</button>
+                  <button type="button" onClick={() => setIsSuppliesModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">
+                    閉じる
+                  </button>
                 </div>
-                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">保存する</button>
+                <button type="submit" className="bg-orange-500 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-orange-600 transition-all">
+                  保存する
+                </button>
               </div>
             </form>
           </div>
@@ -632,30 +792,9 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
             <form onSubmit={handleSaveBudget}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
-                <h3 className="font-black text-lg sm:text-xl text-gray-800">予算項目の設定</h3>
-                <button type="button" onClick={() => setIsBudgetModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
-              </div>
-              <div className="p-6 sm:p-10 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">項目名</label>
-                  <input required className="w-full bg-gray-50 border-none rounded-2xl p-4 sm:p-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="会場費など" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">計画額 (¥)</label>
-                    <input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 sm:p-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.planned || 0} onChange={e=>setEditingItem({...editingItem, planned: parseInt(e.target.value)})}/>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">執行額 (¥)</label>
-                    <input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 sm:p-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.actual || 0} onChange={e=>setEditingItem({...editingItem, actual: parseInt(e.target.value)})}/>
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-                <button type="button" onClick={()=>setIsBudgetModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button>
-                <button type="submit" className="bg-green-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl">決定</button>
-              </div>
+              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">予算項目の設定</h3><button type="button" onClick={() => setIsBudgetModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button></div>
+              <div className="p-10 space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">項目名</label><input required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="会場費など" /></div><div className="grid grid-cols-2 gap-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">計画額 (¥)</label><input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold" value={editingItem?.planned || 0} onChange={e=>setEditingItem({...editingItem, planned: parseInt(e.target.value)})}/></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">執行額 (¥)</label><input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold" value={editingItem?.actual || 0} onChange={e=>setEditingItem({...editingItem, actual: parseInt(e.target.value)})}/></div></div></div>
+              <div className="p-8 bg-gray-50 flex justify-end gap-4"><button type="button" onClick={()=>setIsBudgetModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button><button type="submit" className="bg-green-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl">決定</button></div>
             </form>
           </div>
         </div>

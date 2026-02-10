@@ -35,3 +35,23 @@ export const BUDGET_CATEGORIES = ['会場費', '広報広告費', '制作物費'
 // タスク管理の工程カテゴリ
 // 追加・編集・削除はこの配列を書き換えることでアプリ全体に反映されます
 export const CATEGORIES = ['①設計', '②準備', '③運営', '④事後'];
+
+// 準備物カテゴリ
+export const ITEM_CATEGORIES = [
+  '計画・管理ドキュメント',
+  '競技・ステージ関連',
+  '広報・デザイン制作物',
+  '会場設営・インフラ備品',
+  '運営ツール・消耗品',
+  '来場者対応・ノベルティ'
+];
+
+// 手配方法
+export const PROCUREMENT_METHODS = ['社内制作', '社用品', 'レンタル', '外注', '購入'];
+
+// 準備物ステータス
+export const ITEM_STATUS = {
+  TODO: '未着手',
+  IN_PROGRESS: '手配中',
+  DONE: '完了'
+};
