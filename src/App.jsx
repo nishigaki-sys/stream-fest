@@ -15,8 +15,7 @@ import { auth } from './config/firebase';
 
 // Constants & Initial Data
 import { 
-  BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES,
-  INITIAL_TASKS 
+  BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES 
 } from './constants/appConfig';
 
 // Page Components
@@ -27,6 +26,7 @@ import KanbanBoard from './pages/common/KanbanBoard';
 import GanttChart from './pages/common/GanttChart'; 
 import BudgetTable from './pages/common/BudgetTable';
 import ChatView from './pages/common/ChatView';
+import TaskTable from './pages/common/TaskTable';
 
 const db = getFirestore();
 
@@ -302,6 +302,7 @@ export default function App() {
 
           {[
             { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
+            { id: 'task-list', icon: ListTodo, label: 'タスク' }, // ← 追加
             { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
             { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
             { id: 'budget', icon: Wallet, label: '予算管理' },
@@ -426,6 +427,20 @@ export default function App() {
                 selectedEventId={selectedEventId} 
               />
             )}
+
+              {activeTab === 'task-list' && (
+                <TaskTable 
+                  tasks={filteredTasks} 
+                  users={users} 
+                  onAddTaskClick={() => { 
+                    setIsNewTaskMode(false); 
+                    setEditingItem({ title: '', status: TASK_STATUS.TODO, category: CATEGORIES[0], assignee: '', startDate: '', dueDate: '', eventId: selectedEventId }); 
+                    setIsTaskModalOpen(true); 
+                  }} 
+                  onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} 
+                />
+              )}
+
 
             {activeTab === 'event-settings' && selectedEvent && (
               <div className="max-w-2xl bg-white rounded-[2.5rem] border shadow-sm p-8 sm:p-12 animate-in fade-in slide-in-from-bottom-4">
@@ -572,6 +587,21 @@ export default function App() {
                   <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
                     value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" />
                 )}
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">タスクカテゴリ</label>
+                  <select 
+                    required
+                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
+                    value={editingItem?.category || ''} 
+                    onChange={e => setEditingItem({...editingItem, category: e.target.value})}
+                  >
+                    <option value="" disabled>カテゴリを選択...</option>
+                    {CATEGORIES.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
