@@ -3,17 +3,17 @@ import {
   LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2,
   Menu, X, ChevronRight, TrendingUp, Layers, CalendarDays,
   Wallet, Kanban as KanbanIcon, Lock, Mail, LogIn,
-  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, Settings, MessageSquare
+  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, Settings, MessageSquare, Copy
 } from 'lucide-react';
 
 // Firebase SDK & Config
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { 
-  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDocs, writeBatch
+  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDocs, writeBatch, serverTimestamp
 } from "firebase/firestore"; 
 import { auth } from './config/firebase';
 
-// Constants & Initial Data
+// Constants & マスターデータ
 import { 
   BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES 
 } from './constants/appConfig';
@@ -179,6 +179,52 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  const handleCopyProject = async () => {
+    if (!selectedEvent) return;
+    const confirmCopy = window.confirm(`「${selectedEvent.name}」のタスク情報をコピーして新しいプロジェクトを作成しますか？（担当者はリセットされます）`);
+    if (!confirmCopy) return;
+
+    try {
+      setIsLoading(true);
+      const newEventData = {
+        name: `${selectedEvent.name} (コピー)`,
+        location: selectedEvent.location,
+        startDate: selectedEvent.startDate,
+        hostName: selectedEvent.hostName,
+        status: '進行中',
+        progress: 0,
+        createdAt: serverTimestamp()
+      };
+      const eventDocRef = await addDoc(collection(db, "events"), newEventData);
+      const newEventId = eventDocRef.id;
+
+      const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
+      const batch = writeBatch(db);
+
+      eventTasks.forEach(task => {
+        const newTaskRef = doc(collection(db, "tasks"));
+        const { id, ...taskData } = task;
+        batch.set(newTaskRef, {
+          ...taskData,
+          eventId: newEventId,
+          assignee: '',
+          status: TASK_STATUS.TODO,
+          progress: 0
+        });
+      });
+
+      await batch.commit();
+      setSelectedEventId(newEventId);
+      setActiveTab('event-dashboard');
+      alert('プロジェクトをコピーしました。');
+    } catch (err) {
+      console.error("Copy Error:", err);
+      alert('コピーに失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const confirmDeleteEvent = async () => {
     if (!eventToDelete) return;
     try {
@@ -211,7 +257,12 @@ export default function App() {
   const handleSaveTask = async (e) => {
     e.preventDefault();
     try {
-      const taskData = { ...editingItem, eventId: selectedEventId, status: editingItem.status || TASK_STATUS.TODO };
+      const taskData = { 
+        ...editingItem, 
+        eventId: selectedEventId, 
+        status: editingItem.status || TASK_STATUS.TODO,
+        category: editingItem.category || CATEGORIES[0]
+      };
       if (editingItem.id) {
         const { id, ...data } = taskData;
         await updateDoc(doc(db, "tasks", id), data);
@@ -263,7 +314,6 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[40] lg:hidden animate-in fade-in" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
-      {/* サイドバー */}
       <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 transform lg:relative lg:translate-x-0 flex flex-col text-white ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="p-8 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -282,7 +332,6 @@ export default function App() {
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-overview' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <LayoutDashboard size={20}/><span>プロジェクト全体</span>
               </button>
-
               <div className="py-2">
                 <select className="w-full bg-white/10 border-none rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-white text-white appearance-none cursor-pointer" 
                   value={selectedEventId || ''} onChange={e => handleEventSelect(e.target.value)}>
@@ -290,7 +339,6 @@ export default function App() {
                   {events.map(ev => <option key={ev.id} value={ev.id} className="text-gray-800">{ev.name}</option>)}
                 </select>
               </div>
-
               <button onClick={() => { setActiveTab('hq-members'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-members' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
                 <Users size={20}/><span>メンバー管理</span>
@@ -302,7 +350,7 @@ export default function App() {
 
           {[
             { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
-            { id: 'task-list', icon: ListTodo, label: 'タスク' }, // ← 追加
+            { id: 'task-list', icon: ListTodo, label: 'タスク' },
             { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
             { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
             { id: 'budget', icon: Wallet, label: '予算管理' },
@@ -356,15 +404,13 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto no-scrollbar relative">
           <div className="p-4 sm:p-10 max-w-7xl mx-auto w-full pb-32">
-            <div className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 sm:mb-3">
-                  <span>{isHQ ? 'HQ Access' : 'Host Portal'}</span>
-                  <ChevronRight size={14}/>
-                  <span className="text-[#284db3] truncate max-w-[150px]">{activeTab.replace('-', ' ')}</span>
-                </div>
-                <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 leading-tight">{selectedEvent?.name || 'プロジェクト全体'}</h2>
+            <div className="mb-6 sm:mb-10">
+              <div className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 sm:mb-3">
+                <span>{isHQ ? 'HQ Access' : 'Host Portal'}</span>
+                <ChevronRight size={14}/>
+                <span className="text-[#284db3] truncate max-w-[150px]">{activeTab.replace('-', ' ')}</span>
               </div>
+              <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 leading-tight">{selectedEvent?.name || 'プロジェクト全体'}</h2>
             </div>
 
             {activeTab === 'event-dashboard' && dashboardData && (
@@ -375,7 +421,6 @@ export default function App() {
                   <StatCard title="予算執行額" value={dashboardData.budgetSpend} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
                   <StatCard title="予算消化率" value={dashboardData.budgetProgress} icon={CheckCircle2} color={BRAND_COLORS.RED} />
                 </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                   <div className="lg:col-span-2 bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm p-6 sm:p-8">
                     <h3 className="font-black text-base sm:text-lg flex items-center gap-3 text-gray-800 mb-6 sm:mb-8">
@@ -384,9 +429,7 @@ export default function App() {
                     {dashboardData.myTasks.length > 0 ? (
                       <div className="space-y-3 sm:space-y-4">
                         {dashboardData.myTasks.map(task => (
-                          <div key={task.id} 
-                            onClick={() => { handleTaskUpdate(task.id, null, task); }}
-                            className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
+                          <div key={task.id} onClick={() => handleTaskUpdate(task.id, null, task)} className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
                             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                               <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
                               <div className="min-w-0">
@@ -416,71 +459,47 @@ export default function App() {
 
             {activeTab === 'hq-overview' && <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={handleEventSelect} onAddEvent={() => { setEditingItem({ name: '', location: '', hostName: currentUser?.name || '' }); setIsEventModalOpen(true); }} />}
             {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} />}
-            {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setIsNewTaskMode(false); setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
-            {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => { handleTaskUpdate(task.id, null, task); }} />}
+            {activeTab === 'task-list' && <TaskTable tasks={filteredTasks} users={users} onAddTaskClick={() => { setEditingItem({ title: '', status: TASK_STATUS.TODO, category: CATEGORIES[0], assignee: '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} />}
+            {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
+            {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} />}
             {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
-            
-            {activeTab === 'chat' && (
-              <ChatView 
-                currentUser={currentUser} 
-                users={users} 
-                selectedEventId={selectedEventId} 
-              />
-            )}
-
-              {activeTab === 'task-list' && (
-                <TaskTable 
-                  tasks={filteredTasks} 
-                  users={users} 
-                  onAddTaskClick={() => { 
-                    setIsNewTaskMode(false); 
-                    setEditingItem({ title: '', status: TASK_STATUS.TODO, category: CATEGORIES[0], assignee: '', startDate: '', dueDate: '', eventId: selectedEventId }); 
-                    setIsTaskModalOpen(true); 
-                  }} 
-                  onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} 
-                />
-              )}
-
+            {activeTab === 'chat' && <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />}
 
             {activeTab === 'event-settings' && selectedEvent && (
               <div className="max-w-2xl bg-white rounded-[2.5rem] border shadow-sm p-8 sm:p-12 animate-in fade-in slide-in-from-bottom-4">
-                <h3 className="text-xl font-black text-gray-800 mb-8 flex items-center gap-3">
-                  <Settings className="text-[#284db3]" /> プロジェクトの基本設定
-                </h3>
+                <div className="flex justify-between items-center mb-8">
+                  <h3 className="text-xl font-black text-gray-800 flex items-center gap-3"><Settings className="text-[#284db3]" /> プロジェクトの基本設定</h3>
+                  <button type="button" onClick={handleCopyProject} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                    <Copy size={16}/> プロジェクトをコピー
+                  </button>
+                </div>
                 <form onSubmit={handleSaveEvent} className="space-y-8">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">プロジェクト名</label>
-                    <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                      value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
+                    <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催場所</label>
                     <div className="relative">
                       <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-                      <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                        value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} />
+                      <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催日 (開始予定)</label>
-                      <input type="date" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                        value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
+                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催日</label>
+                      <input type="date" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase ml-4">主催者名</label>
-                      <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                        value={editingItem?.hostName || ''} onChange={e=>setEditingItem({...editingItem, hostName: e.target.value})} />
+                      <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.hostName || ''} onChange={e=>setEditingItem({...editingItem, hostName: e.target.value})} />
                     </div>
                   </div>
                   <div className="pt-6 border-t flex flex-col sm:flex-row justify-between gap-4">
-                    <button type="button" onClick={() => { setEventToDelete(selectedEvent); setIsEventDeleteConfirmOpen(true); }}
-                      className="flex items-center justify-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all">
+                    <button type="button" onClick={() => { setEventToDelete(selectedEvent); setIsEventDeleteConfirmOpen(true); }} className="flex items-center justify-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all">
                       <Trash2 size={16}/> プロジェクトを完全に削除
                     </button>
-                    <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:shadow-blue-100 transition-all">
-                      設定を保存する
-                    </button>
+                    <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:shadow-blue-100 transition-all">設定を保存する</button>
                   </div>
                 </form>
               </div>
@@ -495,10 +514,7 @@ export default function App() {
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
             <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">プロジェクトの削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8">
-              <span className="font-bold text-gray-900">{eventToDelete?.name}</span> を削除しますか？<br/>
-              紐づく全てのタスク・予算データも削除されます。
-            </p>
+            <p className="text-sm sm:text-base text-gray-500 mb-8"><span className="font-bold text-gray-900">{eventToDelete?.name}</span> を削除しますか？<br/>紐づく全てのタスク・予算データも削除されます。</p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setIsEventDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
               <button onClick={confirmDeleteEvent} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">完全に削除</button>
@@ -512,9 +528,7 @@ export default function App() {
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
             <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">タスクの削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8">
-              タスク「<span className="font-bold text-gray-900">{taskToDelete?.title}</span>」を削除しますか？
-            </p>
+            <p className="text-sm sm:text-base text-gray-500 mb-8">タスク「<span className="font-bold text-gray-900">{taskToDelete?.title}</span>」を削除しますか？</p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setIsTaskDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
               <button onClick={confirmDeleteTask} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
@@ -522,38 +536,37 @@ export default function App() {
           </div>
         </div>
       )}
-
       {isEventModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-            <form onSubmit={handleSaveEvent}>
-              <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
-                <h3 className="font-black text-lg sm:text-xl text-gray-800">プロジェクトの新規作成</h3>
-                <button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
-              </div>
-              <div className="p-6 sm:p-10 space-y-6 sm:space-y-8">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Project Name</label>
-                  <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                    value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} placeholder="例: 2026 in 名古屋" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Location</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-                    <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 sm:py-5 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                      value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} placeholder="会場名" />
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-                <button type="button" onClick={()=>setIsEventModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button>
-                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">作成する</button>
-              </div>
-            </form>
-          </div>
+        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
+        <form onSubmit={handleSaveEvent}>
+        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
+        <h3 className="font-black text-lg sm:text-xl text-gray-800">プロジェクトの新規作成</h3>
+        <button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
         </div>
-      )}
+        <div className="p-6 sm:p-10 space-y-6 sm:space-y-8">
+        <div className="space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Project Name</label>
+        <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]"
+        value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} placeholder="例: 2026 in 名古屋" />
+        </div>
+        <div className="space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Location</label>
+        <div className="relative">
+        <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
+        <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 sm:py-5 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]"
+        value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} placeholder="会場名" />
+        </div>
+        </div>
+        </div>
+        <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
+        <button type="button" onClick={()=>setIsEventModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button>
+        <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">作成する</button>
+        </div>
+        </form>
+        </div>
+        </div>
+        )}
 
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
@@ -561,91 +574,52 @@ export default function App() {
             <form onSubmit={handleSaveTask}>
               <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-gray-50/30 sticky top-0 bg-white z-10">
                 <h3 className="font-black text-lg sm:text-xl text-gray-800">タスクの設定</h3>
-                <button type="button" onClick={() => { setIsTaskModalOpen(false); setIsNewTaskMode(false); }} className="p-2 hover:bg-gray-100 rounded-full"><X size={24}/></button>
+                <button type="button" onClick={() => setIsTaskModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={24}/></button>
               </div>
               <div className="p-6 sm:p-10 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-4">Task Name</label>
-                  {!editingItem?.id && (
-                    <button type="button" onClick={() => setIsNewTaskMode(!isNewTaskMode)} className="text-[9px] sm:text-[10px] font-black text-[#284db3] flex items-center gap-1 hover:underline">
-                      {isNewTaskMode ? <ListTodo size={12}/> : <Plus size={12}/>}
-                      {isNewTaskMode ? "既存リストから選択" : "新しくタスク名を入力"}
-                    </button>
-                  )}
+                  <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" />
                 </div>
-
-                {!isNewTaskMode && !editingItem?.id ? (
-                  <select className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm"
-                    onChange={(e) => {
-                      const template = INITIAL_TASKS.find(t => t.title === e.target.value);
-                      if(template) setEditingItem({ ...editingItem, title: template.title, category: template.category });
-                    }} value={editingItem?.title || ''}>
-                    <option value="" disabled>タスクを選択...</option>
-                    {INITIAL_TASKS.map((t, idx) => <option key={idx} value={t.title}>{t.title}</option>)}
-                  </select>
-                ) : (
-                  <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                    value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" />
-                )}
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-4">タスクカテゴリ</label>
-                  <select 
-                    required
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
-                    value={editingItem?.category || ''} 
-                    onChange={e => setEditingItem({...editingItem, category: e.target.value})}
-                  >
+                  <select required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.category || ''} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
                     <option value="" disabled>カテゴリを選択...</option>
-                    {CATEGORIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">担当者</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
-                      value={editingItem?.assignee || ''} onChange={e=>setEditingItem({...editingItem, assignee: e.target.value})}>
+                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.assignee || ''} onChange={e=>setEditingItem({...editingItem, assignee: e.target.value})}>
                       <option value="">未割り当て</option>
                       {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label>
-                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
-                      value={editingItem?.status || ''} onChange={e=>setEditingItem({...editingItem, status: e.target.value})}>
+                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.status || ''} onChange={e=>setEditingItem({...editingItem, status: e.target.value})}>
                       {Object.values(TASK_STATUS).map(s=><option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開始日</label>
-                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
-                      value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
+                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">期日</label>
-                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
-                      value={editingItem?.dueDate || ''} onChange={e=>setEditingItem({...editingItem, dueDate: e.target.value})} />
+                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.dueDate || ''} onChange={e=>setEditingItem({...editingItem, dueDate: e.target.value})} />
                   </div>
                 </div>
               </div>
               <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 sticky bottom-0">
                 <div className="flex gap-3">
                   {editingItem?.id && (
-                    <button 
-                      type="button" 
-                      onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }}
-                      className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      <Trash2 size={16}/> 削除
-                    </button>
+                    <button type="button" onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }} className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/> 削除</button>
                   )}
-                  <button type="button" onClick={()=>{setIsTaskModalOpen(false); setIsNewTaskMode(false);}} className="px-8 py-4 font-bold text-gray-400">閉じる</button>
+                  <button type="button" onClick={()=>setIsTaskModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">閉じる</button>
                 </div>
                 <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">保存する</button>
               </div>
