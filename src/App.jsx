@@ -1,27 +1,18 @@
+// src/App.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, ListTodo, Bell, Search, Plus, CheckCircle2,
-  Menu, X, ChevronRight, TrendingUp, Layers, CalendarDays,
-  Wallet, Kanban as KanbanIcon, Lock, Mail, LogIn,
-  MapPin, Pencil, Trash2, Save, Users, Shield, AlertTriangle, 
-  Settings, MessageSquare, Copy, Package
-} from 'lucide-react';
+import { getFirestore, doc, updateDoc, writeBatch, collection, serverTimestamp } from "firebase/firestore";
+import { useAuth } from './contexts/AuthContext';
+import { useFirestoreData } from './hooks/useFirestoreData';
+import { ROLES } from './constants/appConfig';
 
-// Firebase SDK & Config
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { 
-  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDocs, writeBatch, serverTimestamp
-} from "firebase/firestore"; 
-import { auth } from './config/firebase';
-
-// Constants & マスターデータ
-import { 
-  BRAND_COLORS, ROLES, TASK_STATUS, BUDGET_CATEGORIES, CATEGORIES,
-  ITEM_CATEGORIES, PROCUREMENT_METHODS, ITEM_STATUS
-} from './constants/appConfig';
-
-// Page Components
+// レイアウト・共通コンポーネント
+import Sidebar from './components/layout/Sidebar';
+import Header from './components/layout/Header';
+import CombinedModals from './components/modals/CombinedModals';
 import LoginPage from './pages/auth/LoginPage';
+import EventDashboard from './components/dashboard/EventDashboard';
+
+// ページコンポーネント
 import HQOverview from './pages/hq/HQOverview';
 import HQMemberManagement from './pages/hq/HQMemberManagement';
 import KanbanBoard from './pages/common/KanbanBoard';
@@ -33,772 +24,254 @@ import SuppliesList from './pages/common/SuppliesList';
 
 const db = getFirestore();
 
-/**
- * 統計カードコンポーネント
- */
-const StatCard = ({ title, value, subValue, icon: Icon, color, isCurrency = false }) => (
-  <div className="p-4 sm:p-5 rounded-2xl border bg-white shadow-sm flex items-start justify-between transition-all hover:shadow-md">
-    <div className="min-w-0">
-      <span className="text-gray-500 text-[10px] sm:text-sm font-medium block truncate">{title}</span>
-      <div className="flex items-baseline gap-1 mt-1">
-        <span className="text-lg sm:text-2xl font-black" style={{ color }}>
-          {isCurrency ? `¥${Number(value).toLocaleString()}` : value}
-        </span>
-        {subValue && <span className="text-[8px] sm:text-xs text-gray-400 whitespace-nowrap">{subValue}</span>}
-      </div>
-    </div>
-    <div className="p-1.5 sm:p-2 rounded-xl shrink-0" style={{ backgroundColor: `${color}15`, color: color }}>
-      <Icon size={16} className="sm:w-[18px] sm:h-[18px]" />
-    </div>
-  </div>
-);
-
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  // 1. 認証とデータの取得
+  const { currentUser, isLoggedIn, isLoading: isAuthLoading } = useAuth();
+  const events = useFirestoreData("events");
+  const tasks = useFirestoreData("tasks");
+  const budgets = useFirestoreData("budgets");
+  const users = useFirestoreData("users");
+  const supplies = useFirestoreData("supplies");
+
+  // 2. 状態管理
   const [activeTab, setActiveTab] = useState('hq-overview');
   const [selectedEventId, setSelectedEventId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [modalState, setModalState] = useState({ type: null, data: null });
 
-  // データステート
-  const [events, setEvents] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [supplies, setSupplies] = useState([]);
-
-  // モーダル制御
-  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [isEventDeleteConfirmOpen, setIsEventDeleteConfirmOpen] = useState(false);
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isTaskDeleteConfirmOpen, setIsTaskDeleteConfirmOpen] = useState(false);
-  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [isSuppliesModalOpen, setIsSuppliesModalOpen] = useState(false);
-  const [isSuppliesDeleteConfirmOpen, setIsSuppliesDeleteConfirmOpen] = useState(false);
-  
-  const [editingItem, setEditingItem] = useState(null);
-  const [eventToDelete, setEventToDelete] = useState(null);
-  const [taskToDelete, setTaskToDelete] = useState(null);
-  const [supplyToDelete, setSupplyToDelete] = useState(null);
-  const [isNewTaskMode, setIsNewTaskMode] = useState(false);
-
-  const fontStyle = { fontFamily: '"LINE Seed JP", sans-serif' };
-
-  // リアルタイムデータ同期
+  // 3. ログイン時の自動遷移ロジック
   useEffect(() => {
-    const unsubEvents = onSnapshot(collection(db, "events"), (snapshot) => {
-      setEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    const unsubTasks = onSnapshot(collection(db, "tasks"), (snapshot) => {
-      setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    const unsubBudgets = onSnapshot(collection(db, "budgets"), (snapshot) => {
-      setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    const unsubSupplies = onSnapshot(collection(db, "supplies"), (snapshot) => {
-      setSupplies(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => { unsubEvents(); unsubTasks(); unsubBudgets(); unsubUsers(); unsubSupplies(); };
-  }, []);
+    if (currentUser?.role === ROLES.HOST && currentUser.eventId) {
+      setSelectedEventId(currentUser.eventId);
+      setActiveTab('event-dashboard');
+    }
+  }, [currentUser]);
 
-  // 認証 & 権限による初期表示制御
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const profile = users.find(u => u.email === user.email) || 
-                        { name: user.email.split('@')[0], role: ROLES.HQ, email: user.email };
-        setCurrentUser(profile);
-        setIsLoggedIn(true);
-
-        if (profile.role === ROLES.HOST && profile.eventId) {
-          setSelectedEventId(profile.eventId);
-          setActiveTab('event-dashboard');
-        } else if (profile.role === ROLES.HQ && !selectedEventId) {
-          setActiveTab('hq-overview');
-        }
-      } else {
-        setIsLoggedIn(false);
-        setCurrentUser(null);
-      }
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
-  }, [users]);
-
-  const isHQ = currentUser?.role === ROLES.HQ;
-  const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [events, selectedEventId]);
+  // 4. 計算プロパティ
+  const selectedEvent = useMemo(() => 
+    events.find(e => e.id === selectedEventId), [events, selectedEventId]
+  );
 
   const filteredTasks = useMemo(() => {
     let result = tasks;
     if (selectedEventId) result = result.filter(t => t.eventId === selectedEventId);
-    if (searchQuery) result = result.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(t => 
+        t.title.toLowerCase().includes(q) || 
+        (t.assignee && t.assignee.toLowerCase().includes(q))
+      );
+    }
     return result;
   }, [tasks, selectedEventId, searchQuery]);
 
-  const filteredBudgets = useMemo(() => {
-    return selectedEventId ? budgets.filter(b => b.eventId === selectedEventId) : budgets;
-  }, [budgets, selectedEventId]);
+  // 5. ハンドラー関数
+  const openModal = (type, data = null) => setModalState({ type, data });
+  const closeModal = () => setModalState({ type: null, data: null });
 
-  const filteredSupplies = useMemo(() => {
-    return selectedEventId ? supplies.filter(s => s.eventId === selectedEventId) : [];
-  }, [supplies, selectedEventId]);
-
-  const dashboardData = useMemo(() => {
-    if (!selectedEventId || !currentUser) return null;
-    const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
-    const eventBudgets = budgets.filter(b => b.eventId === selectedEventId);
-    
-    const completedTasks = eventTasks.filter(t => t.status === TASK_STATUS.DONE).length;
-    const totalPlanned = eventBudgets.reduce((a, c) => a + c.planned, 0);
-    const totalActual = eventBudgets.reduce((a, c) => a + c.actual, 0);
-    const budgetProgress = totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 100) : 0;
-
-    const myUnfinishedTasks = eventTasks.filter(t => 
-      t.assignee === currentUser.name && t.status !== TASK_STATUS.DONE
-    );
-
-    return {
-      progress: selectedEvent?.progress || 0,
-      taskStats: `${completedTasks} / ${eventTasks.length}`,
-      budgetSpend: totalActual,
-      budgetProgress: `${budgetProgress}%`,
-      myTasks: myUnfinishedTasks
-    };
-  }, [selectedEventId, tasks, budgets, selectedEvent, currentUser]);
-
-  const handleLogout = () => signOut(auth);
-
-  const handleEventSelect = (id) => {
-    setSelectedEventId(id);
-    setActiveTab('event-dashboard');
-    setIsSidebarOpen(false);
-  };
-
-  const handleSaveEvent = async (e) => {
-    e.preventDefault();
+  // カンバン等のドラッグ＆ドロップ用即時更新関数
+  const handleInstantTaskUpdate = async (taskId, updates) => {
     try {
-      const eventData = { ...editingItem, status: editingItem.status || '進行中', progress: editingItem.progress || 0 };
-      if (editingItem.id) {
-        const { id, ...data } = eventData;
-        await updateDoc(doc(db, "events", id), data);
-      } else {
-        await addDoc(collection(db, "events"), eventData);
-      }
-      setIsEventModalOpen(false);
-      setEditingItem(null);
-      if (activeTab === 'event-settings') setActiveTab('event-dashboard');
-    } catch (err) { console.error(err); }
+      await updateDoc(doc(db, "tasks", taskId), updates);
+    } catch (err) {
+      console.error("Task update error:", err);
+    }
   };
 
+  // プロジェクトのコピー機能
   const handleCopyProject = async () => {
     if (!selectedEvent) return;
-    const confirmCopy = window.confirm(`「${selectedEvent.name}」のタスク情報をコピーして新しいプロジェクトを作成しますか？（担当者はリセットされます）`);
+    const confirmCopy = window.confirm(`「${selectedEvent.name}」をベースに新しいプロジェクトを作成しますか？\n(タスクと準備物の担当者・ステータスはリセットされます)`);
     if (!confirmCopy) return;
 
     try {
-      setIsLoading(true);
-      const newEventData = {
-        name: `${selectedEvent.name} (コピー)`,
-        location: selectedEvent.location,
-        startDate: selectedEvent.startDate,
-        hostName: selectedEvent.hostName,
-        status: '進行中',
-        progress: 0,
-        createdAt: serverTimestamp()
-      };
-      const eventDocRef = await addDoc(collection(db, "events"), newEventData);
-      const newEventId = eventDocRef.id;
-
-      const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       const batch = writeBatch(db);
 
+      // ① 新しいプロジェクトの作成
+      const newEventRef = doc(collection(db, "events"));
+      const newEventData = {
+        ...selectedEvent,
+        name: `${selectedEvent.name} (コピー)`,
+        progress: 0,
+        status: '進行中',
+        createdAt: serverTimestamp()
+      };
+      delete newEventData.id;
+      batch.set(newEventRef, newEventData);
+
+      // ② タスクのコピー（担当者・ステータス・開始/終了日をリセット）
+      const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       eventTasks.forEach(task => {
         const newTaskRef = doc(collection(db, "tasks"));
         const { id, ...taskData } = task;
         batch.set(newTaskRef, {
           ...taskData,
-          eventId: newEventId,
+          eventId: newEventRef.id,
           assignee: '',
-          status: TASK_STATUS.TODO,
+          status: '未着手',
+          startDate: '', // 日付もリセットする場合
+          dueDate: '',
           progress: 0
         });
       });
 
+      // ③ 準備物のコピー（ステータス・手配方法・手配先・担当者をリセット）
+      const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
+      eventSupplies.forEach(supply => {
+        const newSupplyRef = doc(collection(db, "supplies"));
+        const { id, ...supplyData } = supply;
+        batch.set(newSupplyRef, {
+          ...supplyData,
+          eventId: newEventRef.id,
+          status: '未着手',
+          method: '',
+          supplier: '',
+          assignee: ''
+        });
+      });
+
       await batch.commit();
-      setSelectedEventId(newEventId);
+      setSelectedEventId(newEventRef.id);
       setActiveTab('event-dashboard');
       alert('プロジェクトをコピーしました。');
     } catch (err) {
       console.error("Copy Error:", err);
       alert('コピーに失敗しました。');
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const confirmDeleteEvent = async () => {
-    if (!eventToDelete) return;
-    try {
-      const batch = writeBatch(db);
-      batch.delete(doc(db, "events", eventToDelete.id));
-      (await getDocs(query(collection(db, "tasks"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
-      (await getDocs(query(collection(db, "budgets"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
-      (await getDocs(query(collection(db, "supplies"), where("eventId", "==", eventToDelete.id)))).forEach(d => batch.delete(d.ref));
-      await batch.commit();
-      
-      setSelectedEventId(null);
-      setActiveTab('hq-overview');
-      setIsEventDeleteConfirmOpen(false);
-      setEventToDelete(null);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleTaskUpdate = async (taskId, updates, fullTask) => {
-    if (fullTask) {
-      setIsNewTaskMode(false);
-      setEditingItem(fullTask);
-      setIsTaskModalOpen(true);
-    } else if (updates) {
-      try { await updateDoc(doc(db, "tasks", taskId.toString()), updates); }
-      catch (err) { console.error(err); }
-    }
-  };
-
-  const handleSaveTask = async (e) => {
-    e.preventDefault();
-    try {
-      const taskData = { 
-        ...editingItem, 
-        eventId: selectedEventId, 
-        status: editingItem.status || TASK_STATUS.TODO,
-        category: editingItem.category || CATEGORIES[0]
-      };
-      if (editingItem.id) {
-        const { id, ...data } = taskData;
-        await updateDoc(doc(db, "tasks", id), data);
-      } else {
-        await addDoc(collection(db, "tasks"), taskData);
-      }
-      setIsTaskModalOpen(false);
-      setEditingItem(null);
-    } catch (err) { console.error(err); }
-  };
-
-  const confirmDeleteTask = async () => {
-    if (!taskToDelete) return;
-    try {
-      await deleteDoc(doc(db, "tasks", taskToDelete.id));
-      setIsTaskDeleteConfirmOpen(false);
-      setIsTaskModalOpen(false);
-      setTaskToDelete(null);
-      setEditingItem(null);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleSaveSupply = async (e) => {
-    e.preventDefault();
-    try {
-      const data = { ...editingItem, eventId: selectedEventId };
-      if (editingItem.id) {
-        const { id, ...updateData } = data;
-        await updateDoc(doc(db, "supplies", id), updateData);
-      } else {
-        await addDoc(collection(db, "supplies"), data);
-      }
-      setIsSuppliesModalOpen(false);
-      setEditingItem(null);
-    } catch (err) { console.error(err); }
-  };
-
-  const confirmDeleteSupply = async () => {
-    if (!supplyToDelete) return;
-    try {
-      await deleteDoc(doc(db, "supplies", supplyToDelete.id));
-      setIsSuppliesDeleteConfirmOpen(false);
-      setIsSuppliesModalOpen(false);
-      setSupplyToDelete(null);
-      setEditingItem(null);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleSaveBudget = async (e) => {
-    e.preventDefault();
-    try {
-      const budgetData = { ...editingItem, eventId: selectedEventId };
-      if (editingItem.id) {
-        const { id, ...data } = budgetData;
-        await updateDoc(doc(db, "budgets", id), data);
-      } else {
-        await addDoc(collection(db, "budgets"), budgetData);
-      }
-      setIsBudgetModalOpen(false);
-      setEditingItem(null);
-    } catch (err) { console.error(err); }
-  };
-
-  if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50" style={fontStyle}>
-      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-[#284db3]"></div>
-    </div>
-  );
-
+  // 6. ガード句
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-[#284db3]"></div>
+      </div>
+    );
+  }
   if (!isLoggedIn) return <LoginPage />;
 
+  // 7. コンテンツレンダリング
+  const renderContent = () => {
+    const eventContext = {
+      tasks: filteredTasks,
+      budgets: budgets.filter(b => b.eventId === selectedEventId),
+      supplies: supplies.filter(s => s.eventId === selectedEventId),
+    };
+
+    switch (activeTab) {
+      case 'hq-overview':
+        return (
+          <HQOverview 
+            events={events} tasks={tasks} budgets={budgets} 
+            onEventSelect={(id) => { setSelectedEventId(id); setActiveTab('event-dashboard'); }} 
+            onAddEvent={() => openModal('event', { name: '', location: '' })}
+          />
+        );
+      case 'hq-members':
+        return <HQMemberManagement users={users} events={events} />;
+      case 'event-dashboard':
+        return (
+          <EventDashboard 
+            selectedEvent={selectedEvent}
+            tasks={eventContext.tasks}
+            budgets={eventContext.budgets}
+            currentUser={currentUser}
+            onTaskClick={(task) => openModal('task', task)}
+            onKanbanLink={() => setActiveTab('kanban')}
+          />
+        );
+      case 'task-list':
+        return (
+          <TaskTable 
+            tasks={eventContext.tasks} users={users} 
+            onAddTaskClick={() => openModal('task', { title: '', eventId: selectedEventId })}
+            onTaskEdit={(task) => openModal('task', task)} 
+          />
+        );
+      case 'kanban':
+        return (
+          <KanbanBoard 
+            tasks={eventContext.tasks} 
+            currentUser={currentUser} 
+            onAddTaskClick={(status) => openModal('task', { title: '', status, eventId: selectedEventId })}
+            onTaskEdit={(task) => openModal('task', task)} 
+            onTaskUpdate={handleInstantTaskUpdate}
+          />
+        );
+      case 'tasks':
+        return <GanttChart tasks={eventContext.tasks} onTaskEdit={(task) => openModal('task', task)} />;
+      case 'budget':
+        return (
+          <BudgetTable 
+            budgets={eventContext.budgets} 
+            onAddBudgetClick={() => openModal('budget', { title: '', planned: 0, actual: 0, eventId: selectedEventId })}
+            onBudgetEdit={(budget) => openModal('budget', budget)}
+          />
+        );
+      case 'supplies':
+        return (
+          <SuppliesList 
+            items={eventContext.supplies} users={users} 
+            onAddItemClick={() => openModal('supply', { name: '', eventId: selectedEventId })}
+            onEditItemClick={(item) => openModal('supply', item)}
+          />
+        );
+      case 'chat':
+        return <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />;
+      case 'event-settings':
+        return (
+            <div className="max-w-2xl bg-white rounded-[2.5rem] border p-8 sm:p-12 animate-in fade-in">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
+                <button 
+                  onClick={handleCopyProject}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                >
+                  プロジェクトをコピー
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">基本情報の変更は各モーダルから行ってください。</p>
+            </div>
+        );
+      default:
+        return <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={(id) => { setSelectedEventId(id); setActiveTab('event-dashboard'); }} />;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex text-gray-900 relative overflow-hidden" style={fontStyle}>
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[40] lg:hidden animate-in fade-in" onClick={() => setIsSidebarOpen(false)}></div>
-      )}
+    <div className="min-h-screen bg-gray-50 flex text-gray-900 font-sans relative items-start">
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        setIsOpen={setIsSidebarOpen} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        events={events}
+        selectedEventId={selectedEventId}
+        setSelectedEventId={setSelectedEventId}
+      />
 
-      {/* サイドバー */}
-      <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 transform lg:relative lg:translate-x-0 flex flex-col text-white ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
-        <div className="p-8 border-b border-white/10 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-transparent rounded-xl flex items-center justify-center overflow-hidden p-1">
-              <img src="/STREAM_FESTアイコン.png" alt="Logo" className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-xl font-black tracking-tighter uppercase">STREAM FEST.</h1>
+      <div className="flex-1 flex flex-col min-h-screen relative z-10 bg-gray-50">
+        <Header 
+          title={selectedEvent?.name || '全体俯瞰'} 
+          user={currentUser} 
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          onMenuClick={() => setIsSidebarOpen(true)} 
+        />
+
+        <main className="flex-1 p-4 sm:p-10">
+          <div className="max-w-7xl mx-auto">
+            {renderContent()}
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
-        </div>
+        </main>
+      </div>
 
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto no-scrollbar">
-          {isHQ && (
-            <>
-              <button onClick={() => { setActiveTab('hq-overview'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
-                className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-overview' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-                <LayoutDashboard size={20}/><span>プロジェクト全体</span>
-              </button>
-              <div className="py-2">
-                <select className="w-full bg-white/10 border-none rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-white text-white appearance-none cursor-pointer" 
-                  value={selectedEventId || ''} onChange={e => handleEventSelect(e.target.value)}>
-                  <option value="" disabled className="text-gray-800">地域を選択...</option>
-                  {events.map(ev => <option key={ev.id} value={ev.id} className="text-gray-800">{ev.name}</option>)}
-                </select>
-              </div>
-              <button onClick={() => { setActiveTab('hq-members'); setSelectedEventId(null); setIsSidebarOpen(false); }} 
-                className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === 'hq-members' ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-                <Users size={20}/><span>メンバー管理</span>
-              </button>
-            </>
-          )}
-
-          <div className="pt-8 pb-3 px-5 text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Project Menu</div>
-
-          {/* プロジェクトメニュー配列 */}
-          {[
-            { id: 'event-dashboard', icon: TrendingUp, label: 'ダッシュボード' },
-            { id: 'task-list', icon: ListTodo, label: 'タスク' },
-            { id: 'kanban', icon: KanbanIcon, label: 'カンバンボード' },
-            { id: 'tasks', icon: CalendarDays, label: 'ガントチャート' },
-            { id: 'supplies', icon: Package, label: '準備物リスト' },
-            { id: 'budget', icon: Wallet, label: '予算管理' },
-            { id: 'chat', icon: MessageSquare, label: 'チャット' },
-            { id: 'event-settings', icon: Settings, label: 'プロジェクト設定' },
-          ].map(item => {
-            const canSee = isHQ ? !!selectedEventId : (currentUser?.eventId === selectedEventId && !!selectedEventId);
-            return canSee && (
-              <button key={item.id} onClick={() => { 
-                  setActiveTab(item.id); 
-                  if(item.id === 'event-settings') setEditingItem(selectedEvent);
-                  setIsSidebarOpen(false); 
-                }} 
-                className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'bg-white text-[#284db3] font-bold shadow-xl' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-                <item.icon size={20}/><span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-6 border-t border-white/10 bg-[#284db3]/50 shrink-0">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-5 py-4 text-white/70 font-bold hover:text-white hover:bg-white/10 rounded-xl transition-all">
-            <LogIn className="rotate-180" size={20}/><span>ログアウト</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* メインビュー */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative z-10 bg-gray-50">
-        <header className="bg-white/80 backdrop-blur-md border-b h-16 sm:h-20 flex items-center justify-between px-4 sm:px-10 sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-4 flex-1">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full"><Menu size={24} /></button>
-            <div className="relative max-w-xs sm:max-w-md w-full">
-              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input type="text" placeholder="検索..." className="w-full pl-10 pr-4 py-2 sm:py-3 bg-gray-100 border-none rounded-2xl text-xs sm:text-sm focus:ring-2 focus:ring-[#284db3] outline-none font-medium transition-all" 
-                value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-6 ml-2">
-            <button className="relative p-2 sm:p-3 rounded-2xl text-gray-400 hover:bg-gray-100 transition-all"><Bell size={20}/></button>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="text-right hidden md:block">
-                <div className="text-xs font-black text-gray-800">{currentUser?.name}</div>
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{currentUser?.role}</div>
-              </div>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-100 flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
-                <span className="text-[#284db3] font-black text-sm sm:text-lg">{currentUser?.name?.[0]}</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto no-scrollbar relative">
-          <div className="p-4 sm:p-10 max-w-7xl mx-auto w-full pb-32">
-            <div className="mb-6 sm:mb-10">
-              <div className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 sm:mb-3">
-                <span>{isHQ ? 'HQ Access' : 'Host Portal'}</span>
-                <ChevronRight size={14}/>
-                <span className="text-[#284db3] truncate max-w-[150px]">{activeTab.replace('-', ' ')}</span>
-              </div>
-              <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 leading-tight">{selectedEvent?.name || 'プロジェクト全体'}</h2>
-            </div>
-
-            {activeTab === 'event-dashboard' && dashboardData && (
-              <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-500">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                  <StatCard title="プロジェクト進捗" value={`${dashboardData.progress}%`} icon={TrendingUp} color={BRAND_COLORS.BLUE} />
-                  <StatCard title="タスク完了数" value={dashboardData.taskStats} subValue="完了/全タスク" icon={ListTodo} color={BRAND_COLORS.ORANGE} />
-                  <StatCard title="予算執行額" value={dashboardData.budgetSpend} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
-                  <StatCard title="予算消化率" value={dashboardData.budgetProgress} icon={CheckCircle2} color={BRAND_COLORS.RED} />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-                  <div className="lg:col-span-2 bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border shadow-sm p-6 sm:p-8">
-                    <h3 className="font-black text-base sm:text-lg flex items-center gap-3 text-gray-800 mb-6 sm:mb-8">
-                      <ListTodo size={22} className="text-[#284db3]"/> あなたのタスク
-                    </h3>
-                    {dashboardData.myTasks.length > 0 ? (
-                      <div className="space-y-3 sm:space-y-4">
-                        {dashboardData.myTasks.map(task => (
-                          <div key={task.id} onClick={() => handleTaskUpdate(task.id, null, task)} className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
-                            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                              <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-sm sm:text-base text-gray-800 truncate group-hover:text-[#284db3] transition-colors">{task.title}</h4>
-                                <div className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                  <span className="truncate max-w-[80px]">{task.category}</span>
-                                  <span className="flex items-center gap-1 whitespace-nowrap"><CalendarDays size={10}/> {task.dueDate}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-[8px] sm:text-[10px] font-black px-2 py-0.5 sm:py-1 rounded-lg bg-orange-50 text-orange-500 uppercase shrink-0 ml-2">{task.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-10 text-center text-gray-400 font-bold text-sm">対応が必要なタスクはありません。</div>
-                    )}
-                  </div>
-                  <div className="bg-gradient-to-br from-[#284db3] to-blue-500 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-xl shadow-blue-100">
-                    <h4 className="font-black text-lg mb-2">Project Message</h4>
-                    <p className="text-white/80 text-xs sm:text-sm leading-relaxed mb-6 font-medium">ステータスの更新を忘れずに行ってください。</p>
-                    <button onClick={() => setActiveTab('kanban')} className="w-full bg-white text-[#284db3] py-3 sm:py-4 rounded-2xl font-black text-xs sm:text-sm hover:shadow-lg transition-all active:scale-95">カンバンを開く</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'hq-overview' && <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={handleEventSelect} onAddEvent={() => { setEditingItem({ name: '', location: '', hostName: currentUser?.name || '' }); setIsEventModalOpen(true); }} />}
-            {activeTab === 'hq-members' && <HQMemberManagement users={users} events={events} />}
-            {activeTab === 'task-list' && <TaskTable tasks={filteredTasks} users={users} onAddTaskClick={() => { setEditingItem({ title: '', status: TASK_STATUS.TODO, category: CATEGORIES[0], assignee: '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} />}
-            {activeTab === 'kanban' && <KanbanBoard tasks={filteredTasks} currentUser={currentUser} onTaskUpdate={handleTaskUpdate} onAddTaskClick={(status) => { setEditingItem({ title: '', status, category: CATEGORIES[0], assignee: currentUser?.name || '', startDate: '', dueDate: '', eventId: selectedEventId }); setIsTaskModalOpen(true); }} />}
-            {activeTab === 'tasks' && <GanttChart tasks={filteredTasks} onTaskEdit={(task) => handleTaskUpdate(task.id, null, task)} />}
-            {activeTab === 'budget' && <BudgetTable budgets={filteredBudgets} onAddBudgetClick={() => { setEditingItem({ title: '', category: BUDGET_CATEGORIES[0], planned: 0, actual: 0, status: '進行中', eventId: selectedEventId }); setIsBudgetModalOpen(true); }} onBudgetEdit={(budget) => { setEditingItem(budget); setIsBudgetModalOpen(true); }} />}
-            {activeTab === 'chat' && <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />}
-            {activeTab === 'supplies' && (
-  <SuppliesList 
-    items={filteredSupplies} 
-    users={users} 
-    onAddItemClick={() => {
-      setEditingItem({ 
-        name: '', 
-        description: '', // ★ここを追加
-        category: ITEM_CATEGORIES[0], 
-        method: PROCUREMENT_METHODS[0], 
-        supplier: '', 
-        quantity: '1', 
-        assignee: '', 
-        status: ITEM_STATUS.TODO 
-      });
-      setIsSuppliesModalOpen(true);
-    }} 
-    onEditItemClick={(item) => {
-      setEditingItem(item);
-      setIsSuppliesModalOpen(true);
-    }} 
-  />
-)}
-            {activeTab === 'event-settings' && selectedEvent && (
-              <div className="max-w-2xl bg-white rounded-[2.5rem] border shadow-sm p-8 sm:p-12 animate-in fade-in slide-in-from-bottom-4">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-xl font-black text-gray-800 flex items-center gap-3"><Settings className="text-[#284db3]" /> プロジェクトの基本設定</h3>
-                  <button type="button" onClick={handleCopyProject} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                    <Copy size={16}/> プロジェクトをコピー
-                  </button>
-                </div>
-                <form onSubmit={handleSaveEvent} className="space-y-8">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">プロジェクト名</label>
-                    <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催場所</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-                      <input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">開催日</label>
-                      <input type="date" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase ml-4">主催者名</label>
-                      <input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.hostName || ''} onChange={e=>setEditingItem({...editingItem, hostName: e.target.value})} />
-                    </div>
-                  </div>
-                  <div className="pt-6 border-t flex flex-col sm:flex-row justify-between gap-4">
-                    <button type="button" onClick={() => { setEventToDelete(selectedEvent); setIsEventDeleteConfirmOpen(true); }} className="flex items-center justify-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all">
-                      <Trash2 size={16}/> プロジェクトを完全に削除
-                    </button>
-                    <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:shadow-blue-100 transition-all">設定を保存する</button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* モーダル群 (Event / Task / Supplies / Budget) */}
-      {isEventDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
-            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">プロジェクトの削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8"><span className="font-bold text-gray-900">{eventToDelete?.name}</span> を削除しますか？<br/>紐づく全てのタスク・予算データも削除されます。</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => setIsEventDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
-              <button onClick={confirmDeleteEvent} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">完全に削除</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isTaskDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
-            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">タスクの削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8">タスク「<span className="font-bold text-gray-900">{taskToDelete?.title}</span>」を削除しますか？</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => setIsTaskDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
-              <button onClick={confirmDeleteTask} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSuppliesDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6"><AlertTriangle size={32} /></div>
-            <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">準備物の削除</h3>
-            <p className="text-sm sm:text-base text-gray-500 mb-8">「<span className="font-bold text-gray-900">{supplyToDelete?.name}</span>」をリストから削除しますか？</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => setIsSuppliesDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
-              <button onClick={confirmDeleteSupply} className="order-1 sm:order-2 flex-1 px-6 py-4 rounded-2xl font-bold text-white bg-red-500 shadow-lg">削除する</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isEventModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-            <form onSubmit={handleSaveEvent}>
-              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">プロジェクトの新規作成</h3><button type="button" onClick={() => setIsEventModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button></div>
-              <div className="p-10 space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Project Name</label><input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 sm:py-5 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.name || ''} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} placeholder="例: 2026 in 名古屋" /></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Location</label><div className="relative"><MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/><input required className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.location || ''} onChange={e=>setEditingItem({...editingItem, location: e.target.value})} placeholder="会場名" /></div></div></div>
-              <div className="p-8 bg-gray-50 flex justify-end gap-4"><button type="button" onClick={()=>setIsEventModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button><button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">作成する</button></div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isTaskModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSaveTask}>
-              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">タスクの設定</h3><button type="button" onClick={() => setIsTaskModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={24}/></button></div>
-              <div className="p-10 space-y-6">
-                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">Task Name</label><input required className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="タスク名を入力" /></div>
-                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">タスクカテゴリ</label><select required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" value={editingItem?.category || ''} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">担当者</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" value={editingItem?.assignee || ''} onChange={e=>setEditingItem({...editingItem, assignee: e.target.value})}><option value="">未割り当て</option>{users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}</select></div>
-                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" value={editingItem?.status || ''} onChange={e=>setEditingItem({...editingItem, status: e.target.value})}>{Object.values(TASK_STATUS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">開始日</label><input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm" value={editingItem?.startDate || ''} onChange={e=>setEditingItem({...editingItem, startDate: e.target.value})} /></div>
-                  <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">期日</label><input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm" value={editingItem?.dueDate || ''} onChange={e=>setEditingItem({...editingItem, dueDate: e.target.value})} /></div>
-                </div>
-              </div>
-              <div className="p-8 bg-gray-50 flex justify-between gap-4 sticky bottom-0">
-                <div className="flex gap-3">{editingItem?.id && (<button type="button" onClick={() => { setTaskToDelete(editingItem); setIsTaskDeleteConfirmOpen(true); }} className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/> 削除</button>)}<button type="button" onClick={()=>setIsTaskModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">閉じる</button></div>
-                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-xl">保存する</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isSuppliesModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSaveSupply}>
-              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center">
-                <h3 className="font-black text-xl text-gray-800">準備物の設定</h3>
-                <button type="button" onClick={() => setIsSuppliesModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                  <X size={24}/>
-                </button>
-              </div>
-              <div className="p-10 space-y-6">
-                {/* 詳細名 */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">詳細名</label>
-                  <input 
-                    required 
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500" 
-                    value={editingItem?.name || ''} 
-                    onChange={e => setEditingItem({...editingItem, name: e.target.value})} 
-                    placeholder="例: 運営マニュアル" 
-                  />
-                </div>
-
-                {/* 詳細内容（追加項目） */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">詳細内容</label>
-                  <textarea 
-                    className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500 min-h-[120px] resize-none text-sm" 
-                    value={editingItem?.description || ''} 
-                    onChange={e => setEditingItem({...editingItem, description: e.target.value})} 
-                    placeholder="具体的な内容や備考を自由に入力してください" 
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  {/* カテゴリ選択 */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">カテゴリ</label>
-                    <select 
-                      required
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500 text-sm" 
-                      value={editingItem?.category || ''} 
-                      onChange={e => setEditingItem({...editingItem, category: e.target.value})}
-                    >
-                      <option value="" disabled>選択してください</option>
-                      {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  {/* ステータス選択 */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label>
-                    <select 
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" 
-                      value={editingItem?.status || ''} 
-                      onChange={e => setEditingItem({...editingItem, status: e.target.value})}
-                    >
-                      {Object.values(ITEM_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  {/* 手配方法 */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">手配方法</label>
-                    <select 
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" 
-                      value={editingItem?.method || ''} 
-                      onChange={e => setEditingItem({...editingItem, method: e.target.value})}
-                    >
-                      {PROCUREMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  {/* 数量 */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">数量</label>
-                    <input 
-                      className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none" 
-                      value={editingItem?.quantity || ''} 
-                      onChange={e => setEditingItem({...editingItem, quantity: e.target.value})} 
-                      placeholder="1"
-                    />
-                  </div>
-                </div>
-
-                {/* 手配先 / 担当者 */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">手配先 / 担当者</label>
-                  <div className="flex gap-4">
-                    <input 
-                      className="flex-1 bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none" 
-                      placeholder="手配先名" 
-                      value={editingItem?.supplier || ''} 
-                      onChange={e => setEditingItem({...editingItem, supplier: e.target.value})} 
-                    />
-                    <select 
-                      className="flex-1 bg-gray-50 border-none rounded-2xl p-4 font-bold text-sm outline-none" 
-                      value={editingItem?.assignee || ''} 
-                      onChange={e => setEditingItem({...editingItem, assignee: e.target.value})}
-                    >
-                      <option value="">担当者を選択</option>
-                      {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8 bg-gray-50 flex justify-between gap-4 sticky bottom-0">
-                <div className="flex gap-3">
-                  {editingItem?.id && (
-                    <button 
-                      type="button" 
-                      onClick={() => { setSupplyToDelete(editingItem); setIsSuppliesDeleteConfirmOpen(true); }} 
-                      className="flex items-center gap-2 px-6 py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-black hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      <Trash2 size={16}/> 削除
-                    </button>
-                  )}
-                  <button type="button" onClick={() => setIsSuppliesModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">
-                    閉じる
-                  </button>
-                </div>
-                <button type="submit" className="bg-orange-500 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-orange-600 transition-all">
-                  保存する
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isBudgetModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-            <form onSubmit={handleSaveBudget}>
-              <div className="p-8 border-b bg-gray-50/30 sticky top-0 bg-white z-10 flex justify-between items-center"><h3 className="font-black text-xl text-gray-800">予算項目の設定</h3><button type="button" onClick={() => setIsBudgetModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button></div>
-              <div className="p-10 space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">項目名</label><input required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" value={editingItem?.title || ''} onChange={e=>setEditingItem({...editingItem, title: e.target.value})} placeholder="会場費など" /></div><div className="grid grid-cols-2 gap-6"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">計画額 (¥)</label><input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold" value={editingItem?.planned || 0} onChange={e=>setEditingItem({...editingItem, planned: parseInt(e.target.value)})}/></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase ml-4">執行額 (¥)</label><input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold" value={editingItem?.actual || 0} onChange={e=>setEditingItem({...editingItem, actual: parseInt(e.target.value)})}/></div></div></div>
-              <div className="p-8 bg-gray-50 flex justify-end gap-4"><button type="button" onClick={()=>setIsBudgetModalOpen(false)} className="px-8 py-4 font-bold text-gray-400">キャンセル</button><button type="submit" className="bg-green-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl">決定</button></div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CombinedModals 
+        state={modalState} 
+        onClose={closeModal}
+        context={{ selectedEventId, users }}
+      />
     </div>
   );
 }

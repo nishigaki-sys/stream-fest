@@ -1,15 +1,15 @@
+// src/pages/common/SuppliesList.jsx
 import React, { useState, useMemo } from 'react';
-import { Package, Plus, Filter, Edit2 } from 'lucide-react';
-import { ITEM_CATEGORIES, PROCUREMENT_METHODS, ITEM_STATUS } from '../../constants/appConfig';
+import { Package, Plus } from 'lucide-react';
+import { ITEM_CATEGORIES, ITEM_STATUS } from '../../constants/appConfig';
 
 export default function SuppliesList({ items, users, onAddItemClick, onEditItemClick }) {
-  const [filter, setFilter] = useState({ category: '', status: '', method: '' });
+  const [filter, setFilter] = useState({ category: '', status: '' });
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       return (!filter.category || item.category === filter.category) &&
-             (!filter.status || item.status === filter.status) &&
-             (!filter.method || item.method === filter.method);
+             (!filter.status || item.status === filter.status);
     });
   }, [items, filter]);
 
@@ -33,7 +33,7 @@ export default function SuppliesList({ items, users, onAddItemClick, onEditItemC
             {Object.values(ITEM_STATUS).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <button onClick={() => setFilter({category:'', status:'', method:''})} className="px-4 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600">リセット</button>
+        <button onClick={() => setFilter({category:'', status:''})} className="px-4 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600">リセット</button>
       </div>
 
       {/* 一覧 */}
@@ -58,26 +58,22 @@ export default function SuppliesList({ items, users, onAddItemClick, onEditItemC
             <tbody>
               {filteredItems.map(item => (
                 <tr key={item.id} className="border-b last:border-0 hover:bg-gray-50/50 cursor-pointer group" onClick={() => onEditItemClick(item)}>
+                  {/* 詳細名 / カテゴリ */}
                   <td className="px-8 py-6">
                     <div className="font-bold text-gray-700 group-hover:text-orange-600">{item.name}</div>
                     <div className="text-[10px] text-gray-400 font-bold">{item.category}</div>
+                    {item.description && <div className="text-[10px] text-gray-400 mt-1 line-clamp-1">{item.description}</div>}
                   </td>
+                  {/* 手配方法 / 先 */}
                   <td className="px-8 py-6">
-                    <div className="font-bold text-gray-700 group-hover:text-orange-600">{item.name}</div>
-                    {/* 追加：詳細内容の表示（最大2行で省略表示） */}
-                    {item.description && (
-                    <div className="text-[10px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                        {item.description}
-                    </div>
-                    )}
-                    <div className="text-[10px] text-gray-400 font-bold mt-1 italic">{item.category}</div>
-                </td>
-                  <td className="px-8 py-6">
-                    <div className="text-sm font-bold text-gray-600">{item.method}</div>
+                    <div className="text-sm font-bold text-gray-600">{item.method || '-'}</div>
                     <div className="text-[10px] text-gray-400">{item.supplier || '-'}</div>
                   </td>
-                  <td className="px-8 py-6 text-sm font-black text-gray-700">{item.quantity}</td>
+                  {/* 数量 */}
+                  <td className="px-8 py-6 text-sm font-black text-gray-700">{item.quantity || '0'}</td>
+                  {/* 担当者 */}
                   <td className="px-8 py-6 text-sm font-bold text-gray-500">{item.assignee || '未設定'}</td>
+                  {/* 状態 */}
                   <td className="px-8 py-6 text-right">
                     <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase ${
                       item.status === ITEM_STATUS.DONE ? 'bg-green-50 text-green-600' : 

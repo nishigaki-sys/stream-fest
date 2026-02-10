@@ -1,39 +1,42 @@
+// src/pages/hq/HQOverview.jsx
 import React from 'react';
 import { Plus, Building2, Wallet, AlertCircle, Layers, MapPin } from 'lucide-react';
 import { BRAND_COLORS } from '../../constants/appConfig';
 
-// 小規模な共通部品
-const StatCard = ({ title, value, subValue, icon: Icon, color, isCurrency = false }) => (
-  <div className="p-4 sm:p-5 rounded-2xl border bg-white shadow-sm flex items-start justify-between transition-all hover:shadow-md">
-    <div className="min-w-0">
-      <span className="text-gray-500 text-xs sm:text-sm font-medium block truncate">{title}</span>
-      <div className="flex items-baseline gap-1 mt-1">
-        <span className="text-xl sm:text-2xl font-black" style={{ color }}>{isCurrency ? `¥${value.toLocaleString()}` : value}</span>
-        {subValue && <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{subValue}</span>}
-      </div>
-    </div>
-    <div className="p-2 rounded-xl shrink-0" style={{ backgroundColor: `${color}15`, color: color }}><Icon size={18} /></div>
-  </div>
-);
-
-const ProgressBar = ({ progress, height = "h-2", color = BRAND_COLORS.BLUE }) => (
-  <div className={`w-full bg-gray-100 rounded-full ${height} overflow-hidden`}>
-    <div className="h-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: color }}></div>
-  </div>
-);
+// ステップ3で作成した共通UIコンポーネントをインポート
+import StatCard from '../../components/ui/StatCard';
+import ProgressBar from '../../components/ui/ProgressBar';
 
 export default function HQOverview({ events, tasks, budgets, onEventSelect, onAddEvent }) {
-  // 集計ロジック
+  // 全体統計の計算ロジック
   const totalPlannedBudget = budgets.reduce((a, c) => a + c.planned, 0);
   const alertTaskCount = tasks.filter(t => t.status !== '完了').length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 統計カードセクション */}
+      {/* 統計カードセクション: 共通コンポーネント StatCard を使用 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="開催予定数" value={events.length} subValue="2026年度" icon={Building2} color={BRAND_COLORS.BLUE} />
-        <StatCard title="全体予算規模" value={totalPlannedBudget} icon={Wallet} color={BRAND_COLORS.GREEN} isCurrency />
-        <StatCard title="要対応アラート" value={alertTaskCount} subValue="未完了タスク" icon={AlertCircle} color={BRAND_COLORS.RED} />
+        <StatCard 
+          title="開催予定数" 
+          value={events.length} 
+          subValue="2026年度" 
+          icon={Building2} 
+          color={BRAND_COLORS.BLUE} 
+        />
+        <StatCard 
+          title="全体予算規模" 
+          value={totalPlannedBudget} 
+          icon={Wallet} 
+          color={BRAND_COLORS.GREEN} 
+          isCurrency 
+        />
+        <StatCard 
+          title="要対応アラート" 
+          value={alertTaskCount} 
+          subValue="未完了タスク" 
+          icon={AlertCircle} 
+          color={BRAND_COLORS.RED} 
+        />
       </div>
 
       {/* プロジェクト一覧テーブル */}
@@ -50,6 +53,7 @@ export default function HQOverview({ events, tasks, budgets, onEventSelect, onAd
             <Plus size={16}/>新規作成
           </button>
         </div>
+        
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50/50 text-[10px] font-black uppercase text-gray-400 border-b">
@@ -62,17 +66,31 @@ export default function HQOverview({ events, tasks, budgets, onEventSelect, onAd
             </thead>
             <tbody>
               {events.map(ev => {
+                // 各イベントごとの予算執行額を計算
                 const eventBudgets = budgets.filter(b => b.eventId === ev.id);
                 const actualSpend = eventBudgets.reduce((a, c) => a + c.actual, 0);
                 
                 return (
-                  <tr key={ev.id} onClick={() => onEventSelect(ev.id)} className="hover:bg-blue-50/30 border-b last:border-0 cursor-pointer transition-colors group">
-                    <td className="px-6 py-5 font-black text-gray-700 group-hover:text-blue-700">{ev.name}</td>
-                    <td className="px-6 py-5 text-sm text-gray-500">
-                      <div className="flex items-center gap-1"><MapPin size={14}/>{ev.location}</div>
+                  <tr 
+                    key={ev.id} 
+                    onClick={() => onEventSelect(ev.id)} 
+                    className="hover:bg-blue-50/30 border-b last:border-0 cursor-pointer transition-colors group"
+                  >
+                    <td className="px-6 py-5 font-black text-gray-700 group-hover:text-blue-700">
+                      {ev.name}
                     </td>
-                    <td className="px-6 py-5 w-64"><ProgressBar progress={ev.progress} /></td>
-                    <td className="px-6 py-5 text-right font-bold text-sm text-gray-600">¥{actualSpend.toLocaleString()}</td>
+                    <td className="px-6 py-5 text-sm text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <MapPin size={14}/>{ev.location}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 w-64">
+                      {/* 共通コンポーネント ProgressBar を使用 */}
+                      <ProgressBar progress={ev.progress} color={BRAND_COLORS.BLUE} />
+                    </td>
+                    <td className="px-6 py-5 text-right font-bold text-sm text-gray-600">
+                      ¥{actualSpend.toLocaleString()}
+                    </td>
                   </tr>
                 );
               })}
