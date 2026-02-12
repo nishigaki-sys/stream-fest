@@ -36,7 +36,7 @@ export default function Sidebar({
       )}
 
       {/* サイドバー本体: sticky top-0 h-screen によりスクロールに追従 */}
-      <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 lg:relative lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen flex flex-col text-white ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+     <aside className={`fixed inset-y-0 left-0 z-[50] w-72 bg-[#284db3] transition-transform duration-300 lg:relative lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen flex flex-col text-white shrink-0 ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         
         {/* ロゴ・ヘッダーエリア */}
         <div className="p-8 border-b border-white/10 flex items-center justify-between shrink-0">

@@ -70,7 +70,6 @@ export default function App() {
   const openModal = (type, data = null) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
 
-  // カンバン等のドラッグ＆ドロップ用即時更新関数
   const handleInstantTaskUpdate = async (taskId, updates) => {
     try {
       await updateDoc(doc(db, "tasks", taskId), updates);
@@ -87,8 +86,6 @@ export default function App() {
 
     try {
       const batch = writeBatch(db);
-
-      // ① 新しいプロジェクトの作成
       const newEventRef = doc(collection(db, "events"));
       const newEventData = {
         ...selectedEvent,
@@ -100,7 +97,6 @@ export default function App() {
       delete newEventData.id;
       batch.set(newEventRef, newEventData);
 
-      // ② タスクのコピー（担当者・ステータス・開始/終了日をリセット）
       const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       eventTasks.forEach(task => {
         const newTaskRef = doc(collection(db, "tasks"));
@@ -110,13 +106,12 @@ export default function App() {
           eventId: newEventRef.id,
           assignee: '',
           status: '未着手',
-          startDate: '', // 日付もリセットする場合
+          startDate: '', 
           dueDate: '',
           progress: 0
         });
       });
 
-      // ③ 準備物のコピー（ステータス・手配方法・手配先・担当者をリセット）
       const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
       eventSupplies.forEach(supply => {
         const newSupplyRef = doc(collection(db, "supplies"));
@@ -138,6 +133,39 @@ export default function App() {
     } catch (err) {
       console.error("Copy Error:", err);
       alert('コピーに失敗しました。');
+    }
+  };
+
+  // プロジェクトの削除機能
+  const handleDeleteProject = async () => {
+    if (!selectedEvent) return;
+    
+    const confirmFirst = window.confirm(`「${selectedEvent.name}」を削除しますか？\nこの操作は取り消せず、関連する全てのタスク・準備物・予算データも削除されます。`);
+    if (!confirmFirst) return;
+    
+    const confirmSecond = window.confirm(`本当に削除しますか？最終確認です。`);
+    if (!confirmSecond) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
+      const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
+      const eventBudgets = budgets.filter(b => b.eventId === selectedEventId);
+
+      eventTasks.forEach(t => batch.delete(doc(db, "tasks", t.id)));
+      eventSupplies.forEach(s => batch.delete(doc(db, "supplies", s.id)));
+      eventBudgets.forEach(b => batch.delete(doc(db, "budgets", b.id)));
+      batch.delete(doc(db, "events", selectedEventId));
+
+      await batch.commit();
+
+      setSelectedEventId(null);
+      setActiveTab('hq-overview');
+      alert('プロジェクトを削除しました。');
+    } catch (err) {
+      console.error("Delete Error:", err);
+      alert('削除に失敗しました。');
     }
   };
 
@@ -224,12 +252,20 @@ export default function App() {
             <div className="max-w-2xl bg-white rounded-[2.5rem] border p-8 sm:p-12 animate-in fade-in">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
-                <button 
-                  onClick={handleCopyProject}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                >
-                  プロジェクトをコピー
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={handleCopyProject}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                  >
+                    プロジェクトをコピー
+                  </button>
+                  <button 
+                    onClick={handleDeleteProject}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                  >
+                    プロジェクトを削除
+                  </button>
+                </div>
               </div>
               <p className="text-sm text-gray-500 mb-4">基本情報の変更は各モーダルから行ってください。</p>
             </div>
