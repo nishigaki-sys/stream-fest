@@ -9,6 +9,7 @@ import { ROLES } from './constants/appConfig';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import CombinedModals from './components/modals/CombinedModals';
+import ProfileModal from './components/modals/ProfileModal'; // 追加
 import LoginPage from './pages/auth/LoginPage';
 import EventDashboard from './components/dashboard/EventDashboard';
 
@@ -37,6 +38,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('hq-overview');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // 追加
   const [searchQuery, setSearchQuery] = useState('');
   const [modalState, setModalState] = useState({ type: null, data: null });
 
@@ -70,6 +72,7 @@ export default function App() {
   const openModal = (type, data = null) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
 
+  // カンバン等のドラッグ＆ドロップ用即時更新関数
   const handleInstantTaskUpdate = async (taskId, updates) => {
     try {
       await updateDoc(doc(db, "tasks", taskId), updates);
@@ -86,6 +89,8 @@ export default function App() {
 
     try {
       const batch = writeBatch(db);
+
+      // ① 新しいプロジェクトの作成
       const newEventRef = doc(collection(db, "events"));
       const newEventData = {
         ...selectedEvent,
@@ -97,6 +102,7 @@ export default function App() {
       delete newEventData.id;
       batch.set(newEventRef, newEventData);
 
+      // ② タスクのコピー
       const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       eventTasks.forEach(task => {
         const newTaskRef = doc(collection(db, "tasks"));
@@ -112,6 +118,7 @@ export default function App() {
         });
       });
 
+      // ③ 準備物のコピー
       const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
       eventSupplies.forEach(supply => {
         const newSupplyRef = doc(collection(db, "supplies"));
@@ -204,10 +211,10 @@ export default function App() {
             selectedEvent={selectedEvent}
             tasks={eventContext.tasks}
             budgets={eventContext.budgets}
-            supplies={eventContext.supplies} // データを追加
+            supplies={eventContext.supplies}
             currentUser={currentUser}
             onTaskClick={(task) => openModal('task', task)}
-            onEditSupplyClick={(item) => openModal('supply', item)} // ハンドラーを追加
+            onEditSupplyClick={(item) => openModal('supply', item)}
             onKanbanLink={() => setActiveTab('kanban')}
           />
         );
@@ -265,13 +272,13 @@ export default function App() {
                     onClick={handleCopyProject}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                   >
-                    プロジェクトをコピー
+                    コピー
                   </button>
                   <button 
                     onClick={handleDeleteProject}
                     className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm"
                   >
-                    プロジェクトを削除
+                    削除
                   </button>
                 </div>
               </div>
@@ -320,6 +327,7 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onMenuClick={() => setIsSidebarOpen(true)} 
+          onProfileClick={() => setIsProfileModalOpen(true)}
         />
 
         <main className="flex-1 p-4 sm:p-10">
@@ -333,6 +341,12 @@ export default function App() {
         state={modalState} 
         onClose={closeModal}
         context={{ selectedEventId, users }}
+      />
+
+      <ProfileModal 
+        isOpen={isProfileModalOpen} 
+        onClose={() => setIsProfileModalOpen(false)} 
+        user={currentUser} 
       />
     </div>
   );

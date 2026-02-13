@@ -1,15 +1,19 @@
+// src/pages/hq/HQMemberManagement.jsx
 import React, { useState } from 'react';
-import { Mail, Shield, Pencil, Trash2, X, Lock, Save, AlertTriangle, Users } from 'lucide-react';
+import { Mail, Shield, Pencil, Trash2, X, Lock, Save, AlertTriangle, Users, Loader2 } from 'lucide-react';
 import { getFirestore, doc, updateDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth"; // 認証用に追加
 import { ROLES } from '../../constants/appConfig';
 
 const db = getFirestore();
+const auth = getAuth(); // Firebase Auth インスタンス
 
 export default function HQMemberManagement({ users, events }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // 送信中状態
 
   const handleEditClick = (user) => {
     setEditingUser({ ...user, password: '' });
@@ -33,18 +37,54 @@ export default function HQMemberManagement({ users, events }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     try {
       if (editingUser.id) {
+        // --- 既存ユーザーの編集（Firestoreのみ更新） ---
         const { password, id, ...userData } = editingUser;
-        if (password) userData.password = password;
+        // 注意: クライアントSDKでは他人のパスワードを直接変更することはできません
         await updateDoc(doc(db, "users", id), userData);
+        alert("ユーザー情報を更新しました。");
       } else {
-        await addDoc(collection(db, "users"), editingUser);
+        // --- 新規メンバー招待（Authentication 登録 + Firestore 保存） ---
+        if (!editingUser.password || editingUser.password.length < 6) {
+          alert("パスワードは6文字以上で設定してください。");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // 1. Firebase Authentication にユーザーを作成
+        // 注意: 作成に成功するとブラウザが新しいユーザーでログイン状態になるため、
+        // 運用の形態によってはバックエンド（Cloud Functions）での実装が推奨されます。
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          editingUser.email,
+          editingUser.password
+        );
+
+        // 2. Firestore にプロファイルを保存
+        const { password, ...firestoreData } = editingUser;
+        await addDoc(collection(db, "users"), {
+          ...firestoreData,
+          uid: userCredential.user.uid, // 認証IDを紐付け
+          createdAt: new Date()
+        });
+
+        alert(`メンバー「${editingUser.name}」を招待しました。登録したメールアドレスとパスワードでログイン可能です。`);
       }
       setIsModalOpen(false);
       setEditingUser(null);
     } catch (e) {
       console.error("Error saving user: ", e);
+      if (e.code === 'auth/email-already-in-use') {
+        alert("このメールアドレスは既に登録されています。");
+      } else {
+        alert("エラーが発生しました: " + e.message);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -123,16 +163,20 @@ export default function HQMemberManagement({ users, events }) {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-4">メールアドレス</label>
                   <input required type="email" className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                    value={editingUser?.email || ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} />
+                    value={editingUser?.email || ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} 
+                    disabled={!!editingUser?.id} // 編集時はメール変更不可（認証とズレるため）
+                  />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-4">{editingUser?.id ? 'パスワード (変更時のみ)' : '初期パスワード'}</label>
-                  <div className="relative">
-                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-                    <input required={!editingUser?.id} type="text" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
-                      placeholder="6文字以上" value={editingUser?.password || ''} onChange={e => setEditingUser({...editingUser, password: e.target.value})} />
+                {!editingUser?.id && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-4">初期パスワード</label>
+                    <div className="relative">
+                      <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
+                      <input required type="text" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-14 pr-6 font-bold outline-none focus:ring-2 focus:ring-[#284db3]" 
+                        placeholder="6文字以上" value={editingUser?.password || ''} onChange={e => setEditingUser({...editingUser, password: e.target.value})} />
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-4">役割</label>
@@ -150,9 +194,10 @@ export default function HQMemberManagement({ users, events }) {
                 </div>
               </div>
               <div className="p-6 sm:p-8 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors">キャンセル</button>
-                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2">
-                  <Save size={20}/> 保存する
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors" disabled={isSubmitting}>キャンセル</button>
+                <button type="submit" className="bg-[#284db3] text-white px-10 py-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 disabled:bg-gray-400" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
+                  {editingUser?.id ? '保存する' : 'メンバーを登録'}
                 </button>
               </div>
             </form>
@@ -160,6 +205,7 @@ export default function HQMemberManagement({ users, events }) {
         </div>
       )}
 
+      {/* 削除確認モーダル（既存のまま） */}
       {isDeleteConfirmOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-8 sm:p-10 text-center animate-in zoom-in duration-200">
@@ -168,7 +214,8 @@ export default function HQMemberManagement({ users, events }) {
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-gray-800 mb-2">メンバーの削除</h3>
             <p className="text-sm sm:text-base text-gray-500 mb-8">
-              <span className="font-bold text-gray-800">{userToDelete?.name}</span> さんを削除してもよろしいですか？
+              <span className="font-bold text-gray-800">{userToDelete?.name}</span> さんを削除してもよろしいですか？<br/>
+              <span className="text-xs text-red-400">※認証システム（Authentication）側の削除は別途コンソールから行う必要があります。</span>
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setIsDeleteConfirmOpen(false)} className="order-2 sm:order-1 flex-1 px-6 py-4 rounded-2xl font-bold text-gray-400 bg-gray-50">キャンセル</button>
