@@ -204,8 +204,10 @@ export default function App() {
             selectedEvent={selectedEvent}
             tasks={eventContext.tasks}
             budgets={eventContext.budgets}
+            supplies={eventContext.supplies} // データを追加
             currentUser={currentUser}
             onTaskClick={(task) => openModal('task', task)}
+            onEditSupplyClick={(item) => openModal('supply', item)} // ハンドラーを追加
             onKanbanLink={() => setActiveTab('kanban')}
           />
         );
@@ -254,6 +256,12 @@ export default function App() {
                 <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
                 <div className="flex gap-3">
                   <button 
+                    onClick={() => openModal('event', selectedEvent)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                  >
+                    基本情報を編集
+                  </button>
+                  <button 
                     onClick={handleCopyProject}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                   >
@@ -267,7 +275,25 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-gray-500 mb-4">基本情報の変更は各モーダルから行ってください。</p>
+              
+              <div className="space-y-4 border-t pt-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <span className="text-xs font-black text-gray-400 uppercase">会場</span>
+                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.location || '-'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <span className="text-xs font-black text-gray-400 uppercase">住所</span>
+                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.address || '-'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <span className="text-xs font-black text-gray-400 uppercase">開催期間</span>
+                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.period || '-'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <span className="text-xs font-black text-gray-400 uppercase">主催者</span>
+                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.organizer || '-'}</span>
+                </div>
+              </div>
             </div>
         );
       default:

@@ -1,6 +1,6 @@
 // src/components/modals/SupplyModal.jsx
 import React, { useState, useEffect } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, ExternalLink } from 'lucide-react'; // ExternalLink を追加
 import { getFirestore, collection, addDoc, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { ITEM_CATEGORIES, PROCUREMENT_METHODS, ITEM_STATUS } from '../../constants/appConfig';
 
@@ -10,7 +10,12 @@ export default function SupplyModal({ isOpen, onClose, editingItem, users, event
   const [formData, setFormData] = useState(null);
 
   useEffect(() => {
-    if (editingItem) setFormData(editingItem);
+    if (editingItem) {
+      setFormData({
+        ...editingItem,
+        supplyUrl: editingItem.supplyUrl || '' // 共有URLの初期化
+      });
+    }
   }, [editingItem]);
 
   if (!isOpen || !formData) return null;
@@ -34,6 +39,13 @@ export default function SupplyModal({ isOpen, onClose, editingItem, users, event
     } catch (err) { console.error(err); }
   };
 
+  // リンクを新しいタブで開く関数
+  const handleOpenLink = () => {
+    if (formData.supplyUrl) {
+      window.open(formData.supplyUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
@@ -46,6 +58,31 @@ export default function SupplyModal({ isOpen, onClose, editingItem, users, event
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-4">詳細名</label>
               <input required className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-orange-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="例: 運営マニュアル" />
+            </div>
+
+            {/* 追加：成果物・共有URL入力欄 */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-[#284db3] uppercase ml-4 flex items-center gap-1">
+                <ExternalLink size={12}/> 成果物・共有URL
+              </label>
+              <div className="flex gap-2">
+                <input 
+                  className="flex-1 bg-blue-50/50 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-[#284db3] text-sm" 
+                  value={formData.supplyUrl} 
+                  onChange={e => setFormData({...formData, supplyUrl: e.target.value})} 
+                  placeholder="GoogleドライブのフォルダURLなどを入力" 
+                />
+                {formData.supplyUrl && (
+                  <button
+                    type="button"
+                    onClick={handleOpenLink}
+                    className="px-4 bg-[#284db3] text-white rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center shadow-md"
+                    title="リンクを開く"
+                  >
+                    <ExternalLink size={18} />
+                  </button>
+                )}
+              </div>
             </div>
             
             <div className="grid grid-cols-2 gap-6">

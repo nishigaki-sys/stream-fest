@@ -1,26 +1,19 @@
 // src/pages/common/KanbanBoard.jsx
 import React, { useState } from 'react';
-import { Plus, GripVertical, CalendarDays } from 'lucide-react';
+import { Plus, GripVertical, CalendarDays, ExternalLink } from 'lucide-react';
 import { TASK_STATUS, BRAND_COLORS } from '../../constants/appConfig';
 
 /**
  * カンバンボードコンポーネント
- * @param {Array} tasks - 表示対象のタスク一覧
- * @param {Object} currentUser - ログイン中のユーザー情報
- * @param {Function} onTaskUpdate - ドラッグ＆ドロップ時の即時更新関数 (Firestore update)
- * @param {Function} onAddTaskClick - 新規タスク追加ボタンクリック時のハンドラー
- * @param {Function} onTaskEdit - タスクカードクリック時の編集ハンドラー (Modal Open)
  */
 export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTaskClick, onTaskEdit }) {
   const [dragOverStatus, setDragOverStatus] = useState(null);
 
-  // ドラッグ開始時：タスクIDを保持
   const onDragStart = (e, taskId) => {
     e.dataTransfer.setData('taskId', taskId.toString());
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  // ドラッグ中：重なっているカラムのステータスを保持
   const onDragOver = (e, status) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -29,31 +22,30 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
     }
   };
 
-  // カラムから離れた時
   const onDragLeave = () => {
     setDragOverStatus(null);
   };
 
-  // ドロップ時：ステータスを更新
   const onDrop = (e, targetStatus) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('taskId');
     setDragOverStatus(null);
 
     if (taskId && onTaskUpdate) {
-      // App.jsx から渡された handleInstantTaskUpdate を実行
       onTaskUpdate(taskId, { status: targetStatus });
     }
   };
 
   return (
-    <div className="flex flex-col sm:flex-row gap-6 pb-8 pt-2 px-2 items-start">
+    /* 修正：overflow-x-autoを削除し、min-w-maxでコンテンツ幅を確保 */
+    <div className="flex flex-col sm:flex-row gap-6 pb-8 pt-2 px-2 items-start min-w-max">
       {Object.values(TASK_STATUS).map(status => (
         <div key={status} 
           onDragOver={(e) => onDragOver(e, status)}
           onDragLeave={onDragLeave}
           onDrop={(e) => onDrop(e, status)}
-          className={`flex-1 min-w-full sm:min-w-[320px] sm:max-w-[320px] rounded-[2rem] p-4 transition-all duration-300 ${
+          /* 修正：min-w-fullを削除し、固定幅または最小幅のみを指定 */
+          className={`flex-1 w-[320px] rounded-[2rem] p-4 transition-all duration-300 ${
             dragOverStatus === status 
               ? 'bg-blue-100/50 ring-4 ring-[#284db3] ring-inset' 
               : 'bg-gray-100/50'
@@ -73,7 +65,7 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
               <div key={task.id} 
                 draggable 
                 onDragStart={(e) => onDragStart(e, task.id)}
-                onClick={() => onTaskEdit(task)} // クリックで編集モーダルを開く
+                onClick={() => onTaskEdit(task)}
                 className="bg-white p-4 sm:p-5 rounded-[1.5rem] shadow-sm border border-gray-100 hover:shadow-xl hover:border-blue-200 transition-all cursor-grab active:cursor-grabbing group"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -81,7 +73,21 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
                     style={{ backgroundColor: `${BRAND_COLORS.BLUE}10`, color: BRAND_COLORS.BLUE }}>
                     {task.category}
                   </span>
-                  <GripVertical size={14} className="text-gray-200 group-hover:text-gray-400"/>
+                  <div className="flex items-center gap-2">
+                    {task.deliverableUrl && (
+                      <a 
+                        href={task.deliverableUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 text-[#284db3] hover:bg-blue-50 rounded-md transition-colors"
+                        title="成果物を確認"
+                      >
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                    <GripVertical size={14} className="text-gray-200 group-hover:text-gray-400"/>
+                  </div>
                 </div>
                 <h5 className="font-bold text-xs sm:text-sm text-gray-800 leading-snug mb-4 group-hover:text-[#284db3]">
                   {task.title}
@@ -98,7 +104,6 @@ export default function KanbanBoard({ tasks, currentUser, onTaskUpdate, onAddTas
               </div>
             ))}
 
-            {/* タスク追加ボタン */}
             <button 
               onClick={() => onAddTaskClick(status)}
               className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[1.5rem] text-gray-400 hover:bg-white hover:border-[#284db3] hover:text-[#284db3] transition-all flex items-center justify-center gap-2"

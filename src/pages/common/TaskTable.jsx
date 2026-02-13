@@ -1,5 +1,6 @@
+// src/pages/common/TaskTable.jsx
 import React, { useState, useMemo } from 'react';
-import { ListTodo, Plus, Search, Filter, Trash2 } from 'lucide-react';
+import { ListTodo, Plus, Filter, ExternalLink } from 'lucide-react'; // ExternalLink を追加
 import { BRAND_COLORS, TASK_STATUS, CATEGORIES } from '../../constants/appConfig';
 
 export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) {
@@ -102,7 +103,7 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                 <th className="px-8 py-5">カテゴリ</th>
                 <th className="px-8 py-5">担当者</th>
                 <th className="px-8 py-5">期限</th>
-                <th className="px-8 py-5 text-right">ステータス</th>
+                <th className="px-8 py-5 text-right">ステータス / 成果物</th>
               </tr>
             </thead>
             <tbody>
@@ -124,10 +125,27 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                   </td>
                   <td className="px-8 py-6 text-sm text-gray-400 font-medium">{t.dueDate || '-'}</td>
                   <td className="px-8 py-6 text-right">
-                    <span className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" 
-                      style={{ backgroundColor: `${getStatusColor(t.status)}15`, color: getStatusColor(t.status) }}>
-                      {t.status}
-                    </span>
+                    <div className="flex items-center justify-end gap-3">
+                      <span className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" 
+                        style={{ backgroundColor: `${getStatusColor(t.status)}15`, color: getStatusColor(t.status) }}>
+                        {t.status}
+                      </span>
+                      {/* 成果物URLがある場合にリンクボタンを表示 */}
+                      {t.deliverableUrl ? (
+                        <a 
+                          href={t.deliverableUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          onClick={(e) => e.stopPropagation()} // 行クリックの編集イベントを防止
+                          className="p-2 bg-blue-50 text-[#284db3] rounded-lg hover:bg-[#284db3] hover:text-white transition-all shadow-sm"
+                          title="成果物を確認"
+                        >
+                          <ExternalLink size={14} />
+                        </a>
+                      ) : (
+                        <div className="w-8"></div> // レイアウト維持用のスペース
+                      )}
+                    </div>
                   </td>
                 </tr>
               )) : (
