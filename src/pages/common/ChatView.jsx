@@ -1,9 +1,10 @@
 // src/pages/common/ChatView.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Users, MessageSquare, Pencil, X, Check, Trash2 } from 'lucide-react'; // Trash2 を追加
+import { Send, User, Users, MessageSquare, Pencil, X, Check, Trash2 } from 'lucide-react';
 import { 
-  getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc 
-} from "firebase/firestore"; // deleteDoc を追加
+  getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, 
+  serverTimestamp, doc, updateDoc, deleteDoc, arrayUnion // arrayUnionを追加
+} from "firebase/firestore";
 
 const db = getFirestore();
 
@@ -47,13 +48,33 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
 
     if (q) {
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMessages(fetchedMessages);
+
+        // --- 既読処理の追加 ---
+        if (currentUser?.uid) {
+          fetchedMessages.forEach(async (msg) => {
+            // 自分が送信者ではなく、かつ自分がまだ既読配列に入っていない場合のみ更新
+            if (msg.senderEmail !== currentUser.email && (!msg.readBy || !msg.readBy.includes(currentUser.uid))) {
+              try {
+                const msgRef = doc(db, "chats", msg.id);
+                await updateDoc(msgRef, {
+                  readBy: arrayUnion(currentUser.uid)
+                });
+              } catch (err) {
+                console.error("既読更新エラー:", err);
+              }
+            }
+          });
+        }
+        // --------------------
+
       }, (error) => {
         console.error("Firebase Snapshot Error:", error);
       });
       return () => unsubscribe();
     }
-  }, [activeTab, selectedUser, selectedEventId, currentUser?.email]);
+  }, [activeTab, selectedUser, selectedEventId, currentUser]); // currentUserを依存配列に追加
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -68,6 +89,7 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
       senderName: currentUser?.name || '不明なユーザー',
       senderEmail: currentUser?.email || '',
       createdAt: serverTimestamp(),
+      readBy: [currentUser.uid], // 送信時に自分を既読に含める
     };
 
     try {
@@ -117,7 +139,6 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
     }
   };
 
-  // メッセージ削除処理
   const handleDeleteMessage = async (msgId) => {
     if (!window.confirm("このメッセージを削除してもよろしいですか？")) return;
     try {
@@ -174,9 +195,8 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
                   <div key={msg.id} className={`flex flex-col ${msg.senderEmail === currentUser?.email ? 'items-end' : 'items-start'}`}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-black text-gray-400 uppercase">{msg.senderName}</span>
-                      {/* 自分が送信したメッセージの場合のみ編集・削除ボタンを表示 */}
                       {msg.senderEmail === currentUser?.email && editingMessageId !== msg.id && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1">
                           <button onClick={() => startEditing(msg)} className="text-gray-300 hover:text-[#284db3] transition-colors p-1">
                             <Pencil size={12} />
                           </button>
@@ -205,7 +225,6 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
                         </div>
                       </div>
                     ) : (
-                      /* group クラスを追加してボタンの表示制御を有効化 */
                       <div className="group flex flex-col items-end max-w-[80%]">
                         <div className={`p-4 rounded-2xl text-sm font-medium shadow-sm relative ${
                           msg.senderEmail === currentUser?.email 
@@ -219,13 +238,6 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
                             </span>
                           )}
                         </div>
-                        {/* 自分が送信したメッセージの場合、メッセージの下にも削除・編集ボタンを配置可能（モバイル考慮） */}
-                        {msg.senderEmail === currentUser?.email && (
-                          <div className="flex gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity px-1">
-                             <button onClick={() => startEditing(msg)} className="text-[10px] font-bold text-gray-400 hover:text-[#284db3]">編集</button>
-                             <button onClick={() => handleDeleteMessage(msg.id)} className="text-[10px] font-bold text-gray-400 hover:text-red-500">削除</button>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>

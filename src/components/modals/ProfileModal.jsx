@@ -75,15 +75,15 @@ export default function ProfileModal({ isOpen, onClose, user }) {
           <div className="p-10 space-y-8 text-center">
             {/* プレビュー表示 & クリックでアップロード */}
             <div className="relative inline-block mx-auto cursor-pointer group" onClick={() => fileInputRef.current.click()}>
-              <div className="w-28 h-28 rounded-[2.5rem] bg-blue-100 flex items-center justify-center shadow-inner overflow-hidden border-4 border-white shadow-xl relative">
-                {isUploading ? (
+              <div className="w-28 h-28 rounded-full bg-blue-100 flex items-center justify-center shadow-inner overflow-hidden border-4 border-white shadow-xl relative">
+                 {isUploading ? (
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                     <Loader2 className="animate-spin text-white" />
                   </div>
                 ) : avatarUrl ? (
-                  <img src={avatarUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <img src={avatarUrl} alt="Preview" className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[#284db3] text-4xl font-black">{name?.[0] || user?.name?.[0]}</span>
+                    <span className="text-[#284db3] text-4xl font-black">{name?.[0] || user?.name?.[0]}</span>
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
                   <Upload className="text-white opacity-0 group-hover:opacity-100 transition-all" size={24} />

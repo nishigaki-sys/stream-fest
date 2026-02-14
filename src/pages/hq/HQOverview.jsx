@@ -10,7 +10,24 @@ import ProgressBar from '../../components/ui/ProgressBar';
 export default function HQOverview({ events, tasks, budgets, onEventSelect, onAddEvent }) {
   // 全体統計の計算ロジック
   const totalPlannedBudget = budgets.reduce((a, c) => a + c.planned, 0);
-  const alertTaskCount = tasks.filter(t => t.status !== '完了').length;
+
+  // --- 修正箇所: 期限切れ、または1週間以内の未完了タスクを抽出 ---
+  const alertTaskCount = tasks.filter(t => {
+    if (t.status === '完了' || !t.dueDate) return false; // 完了済み、または期限未設定は除外
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // 比較のために時間をリセット
+    const dueDate = new Date(t.dueDate);
+    
+    // 今日から7日後の日付を計算
+    const sevenDaysLater = new Date();
+    sevenDaysLater.setDate(today.getDate() + 7);
+    sevenDaysLater.setHours(23, 59, 59, 999);
+
+    // 期限が7日以内、または期限が今日よりも前の日付（期限切れ）を対象にする
+    return dueDate <= sevenDaysLater;
+  }).length;
+  // ---------
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -33,7 +50,7 @@ export default function HQOverview({ events, tasks, budgets, onEventSelect, onAd
         <StatCard 
           title="要対応アラート" 
           value={alertTaskCount} 
-          subValue="未完了タスク" 
+          subValue="期限間近・超過タスク" // 補助テキストも変更するとわかりやすくなります
           icon={AlertCircle} 
           color={BRAND_COLORS.RED} 
         />

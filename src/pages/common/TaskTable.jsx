@@ -1,8 +1,12 @@
 // src/pages/common/TaskTable.jsx
 import React, { useState, useMemo } from 'react';
-import { ListTodo, Plus, Filter, ExternalLink } from 'lucide-react'; // ExternalLink を追加
+import { ListTodo, Plus, Filter, ExternalLink } from 'lucide-react';
 import { BRAND_COLORS, TASK_STATUS, CATEGORIES } from '../../constants/appConfig';
 
+/**
+ * タスク一覧コンポーネント
+ * 期限に応じて行の背景色をアラートカラーに変更します
+ */
 export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) {
   const [filter, setFilter] = useState({
     assignee: '',
@@ -96,7 +100,7 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50/50 text-[10px] font-black uppercase text-gray-400 border-b">
               <tr>
                 <th className="px-8 py-5">タスク名</th>
@@ -107,48 +111,71 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
               </tr>
             </thead>
             <tbody>
-              {filteredTasks.length > 0 ? filteredTasks.map(t => (
-                <tr key={t.id} className="border-b last:border-0 hover:bg-blue-50/30 transition-colors cursor-pointer group" onClick={() => onTaskEdit(t)}>
-                  <td className="px-8 py-6 font-bold text-gray-700 group-hover:text-[#284db3]">{t.title}</td>
-                  <td className="px-8 py-6">
-                    <span className="text-[10px] font-black uppercase text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">
-                      {t.category}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[#284db3] text-[10px] font-black">
-                        {t.assignee?.[0] || '?'}
-                      </div>
-                      <span className="text-sm font-bold text-gray-500">{t.assignee || '未設定'}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-sm text-gray-400 font-medium">{t.dueDate || '-'}</td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <span className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" 
-                        style={{ backgroundColor: `${getStatusColor(t.status)}15`, color: getStatusColor(t.status) }}>
-                        {t.status}
+              {filteredTasks.length > 0 ? filteredTasks.map(t => {
+                // --- 期限チェックロジック ---
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const dueDate = t.dueDate ? new Date(t.dueDate) : null;
+                const sevenDaysLater = new Date();
+                sevenDaysLater.setDate(today.getDate() + 7);
+
+                let rowBgClass = "hover:bg-blue-50/30"; // デフォルトのホバー色
+                if (t.status !== TASK_STATUS.DONE && dueDate) {
+                  if (dueDate < today) {
+                    rowBgClass = "bg-red-50 hover:bg-red-100"; // 期限切れ（赤）
+                  } else if (dueDate <= sevenDaysLater) {
+                    rowBgClass = "bg-yellow-50 hover:bg-yellow-100"; // 7日以内（黄）
+                  }
+                }
+                // --------------------------
+
+                return (
+                  <tr 
+                    key={t.id} 
+                    className={`border-b last:border-0 transition-colors cursor-pointer group ${rowBgClass}`} 
+                    onClick={() => onTaskEdit(t)}
+                  >
+                    <td className="px-8 py-6 font-bold text-gray-700 group-hover:text-[#284db3]">{t.title}</td>
+                    <td className="px-8 py-6">
+                      <span className="text-[10px] font-black uppercase text-gray-400 bg-gray-100 px-2 py-1 rounded-lg group-hover:bg-white/50 transition-colors">
+                        {t.category}
                       </span>
-                      {/* 成果物URLがある場合にリンクボタンを表示 */}
-                      {t.deliverableUrl ? (
-                        <a 
-                          href={t.deliverableUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          onClick={(e) => e.stopPropagation()} // 行クリックの編集イベントを防止
-                          className="p-2 bg-blue-50 text-[#284db3] rounded-lg hover:bg-[#284db3] hover:text-white transition-all shadow-sm"
-                          title="成果物を確認"
-                        >
-                          <ExternalLink size={14} />
-                        </a>
-                      ) : (
-                        <div className="w-8"></div> // レイアウト維持用のスペース
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )) : (
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[#284db3] text-[10px] font-black">
+                          {t.assignee?.[0] || '?'}
+                        </div>
+                        <span className="text-sm font-bold text-gray-500">{t.assignee || '未設定'}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-sm text-gray-400 font-medium">{t.dueDate || '-'}</td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <span className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" 
+                          style={{ backgroundColor: `${getStatusColor(t.status)}15`, color: getStatusColor(t.status) }}>
+                          {t.status}
+                        </span>
+                        {/* 成果物URLがある場合にリンクボタンを表示 */}
+                        {t.deliverableUrl ? (
+                          <a 
+                            href={t.deliverableUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            onClick={(e) => e.stopPropagation()} 
+                            className="p-2 bg-blue-50 text-[#284db3] rounded-lg hover:bg-[#284db3] hover:text-white transition-all shadow-sm"
+                            title="成果物を確認"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        ) : (
+                          <div className="w-8"></div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }) : (
                 <tr>
                   <td colSpan="5" className="px-8 py-20 text-center text-gray-400 font-bold">
                     該当するタスクが見つかりません

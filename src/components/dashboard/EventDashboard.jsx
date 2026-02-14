@@ -96,21 +96,43 @@ export default function EventDashboard({
             </h3>
             {stats.myTasks.length > 0 ? (
               <div className="space-y-3 sm:space-y-4">
-                {stats.myTasks.map(task => (
-                  <div key={task.id} onClick={() => onTaskClick(task)} className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group bg-gray-50/30">
-                    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                      <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-sm sm:text-base text-gray-800 truncate group-hover:text-[#284db3]">{task.title}</h4>
-                        <div className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] font-bold text-gray-400">
-                          <span>{task.category}</span>
-                          <span className="flex items-center gap-1"><CalendarDays size={10}/> {task.dueDate || '期限未設定'}</span>
+                {stats.myTasks.map(task => {
+                  // --- 期限アラートカラー判定ロジック ---
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+                  const sevenDaysLater = new Date();
+                  sevenDaysLater.setDate(today.getDate() + 7);
+
+                  let bgColorClass = "bg-gray-50/30"; // デフォルト
+                  if (dueDate) {
+                    if (dueDate < today) {
+                      bgColorClass = "bg-red-50"; // 期限切れ
+                    } else if (dueDate <= sevenDaysLater) {
+                      bgColorClass = "bg-yellow-50"; // 7日以内
+                    }
+                  }
+
+                  return (
+                    <div 
+                      key={task.id} 
+                      onClick={() => onTaskClick(task)} 
+                      className={`flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-gray-100 hover:border-[#284db3] transition-all cursor-pointer group ${bgColorClass}`}
+                    >
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                        <div className="w-1.5 h-8 sm:h-10 rounded-full shrink-0" style={{ backgroundColor: BRAND_COLORS.BLUE }}></div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-sm sm:text-base text-gray-800 truncate group-hover:text-[#284db3]">{task.title}</h4>
+                          <div className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] font-bold text-gray-400">
+                            <span>{task.category}</span>
+                            <span className="flex items-center gap-1"><CalendarDays size={10}/> {task.dueDate || '期限未設定'}</span>
+                          </div>
                         </div>
                       </div>
+                      <span className="text-[8px] sm:text-[10px] font-black px-2 py-1 rounded-lg bg-blue-50 text-[#284db3]">{task.status}</span>
                     </div>
-                    <span className="text-[8px] sm:text-[10px] font-black px-2 py-1 rounded-lg bg-blue-50 text-[#284db3]">{task.status}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="py-10 text-center text-gray-400 font-bold text-sm">対応が必要なタスクはありません。</div>
