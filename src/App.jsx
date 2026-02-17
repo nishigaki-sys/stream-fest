@@ -340,7 +340,11 @@ export default function App() {
       <CombinedModals 
         state={modalState} 
         onClose={closeModal}
-        context={{ selectedEventId, users }}
+        context={{ 
+          selectedEventId, 
+          users,
+          budgets: budgets.filter(b => b.eventId === selectedEventId)
+        }}
       />
 
       <ProfileModal 

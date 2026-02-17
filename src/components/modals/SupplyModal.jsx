@@ -6,14 +6,19 @@ import { ITEM_CATEGORIES, PROCUREMENT_METHODS, ITEM_STATUS } from '../../constan
 
 const db = getFirestore();
 
-export default function SupplyModal({ isOpen, onClose, editingItem, users, eventId }) {
+export default function SupplyModal({ isOpen, onClose, editingItem, users, budgets = [], eventId }) {
   const [formData, setFormData] = useState(null);
 
   useEffect(() => {
     if (editingItem) {
       setFormData({
         ...editingItem,
-        supplyUrl: editingItem.supplyUrl || '' // 共有URLの初期化
+        supplyUrl: editingItem.supplyUrl || '',
+        budgetId: editingItem.budgetId || '',
+        // 数量のデフォルト値を 1 に設定（前回の修正）
+        quantity: editingItem.id ? (editingItem.quantity || '') : '1',
+        // 【修正箇所】新規作成時にカテゴリの初期値をセットする
+        category: editingItem.category || ITEM_CATEGORIES[0] 
       });
     }
   }, [editingItem]);
@@ -92,6 +97,22 @@ export default function SupplyModal({ isOpen, onClose, editingItem, users, event
                   {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
+
+              {/* 追加：費用カテゴリ（予算項目との紐付け） */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-green-600 uppercase ml-4">紐づく予算項目 (費用カテゴリ)</label>
+                <select 
+                  className="w-full bg-green-50/50 border-none rounded-2xl p-4 font-bold outline-none text-sm focus:ring-2 focus:ring-green-500" 
+                  value={formData.budgetId} 
+                  onChange={e => setFormData({...formData, budgetId: e.target.value})}
+                >
+                  <option value="">未設定 (予算外)</option>
+                  {budgets && budgets.map(b => (
+                    <option key={b.id} value={b.id}>{b.title} (残金: ¥{(b.planned - b.actual).toLocaleString()})</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase ml-4">ステータス</label>
                 <select className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold outline-none text-sm" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>

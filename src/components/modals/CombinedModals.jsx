@@ -1,4 +1,3 @@
-// src/components/modals/CombinedModals.jsx
 import React from 'react';
 import TaskModal from './TaskModal'; // 要別ファイル化
 import EventModal from './EventModal'; // 要別ファイル化
@@ -37,6 +36,7 @@ export default function CombinedModals({ state, onClose, context }) {
           onClose={onClose} 
           editingItem={data} 
           users={context.users} 
+          budgets={context.budgets}
           eventId={context.selectedEventId} 
         />
       )}
