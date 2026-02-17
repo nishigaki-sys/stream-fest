@@ -148,6 +148,29 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
     }
   };
 
+  // URLをリンクに変換するヘルパー関数
+  const renderMessageText = (text) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline break-all hover:opacity-80"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-[2.5rem] border shadow-sm overflow-hidden animate-in fade-in">
       <div className="flex border-b bg-gray-50/30 shrink-0">
@@ -231,7 +254,9 @@ export default function ChatView({ currentUser, users, selectedEventId }) {
                             ? 'bg-[#284db3] text-white rounded-tr-none' 
                             : 'bg-gray-100 text-gray-800 rounded-tl-none'
                         }`}>
-                          {msg.text}
+                          {/* 修正箇所: msg.text を直接表示せず関数を通す */}
+                          <div className="whitespace-pre-wrap">{renderMessageText(msg.text)}</div>
+                          
                           {msg.updatedAt && (
                             <span className={`block text-[8px] mt-1 opacity-50 text-right ${msg.senderEmail === currentUser?.email ? 'text-white' : 'text-gray-400'}`}>
                               (編集済)

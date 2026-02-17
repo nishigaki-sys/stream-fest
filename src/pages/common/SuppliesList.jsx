@@ -151,6 +151,15 @@ export default function SuppliesList({ items, users, onAddItemClick, onEditItemC
           </table>
         </div>
       </div>
+      <div className="mt-8 p-6 bg-orange-50/50 rounded-[1.5rem] border border-orange-100">
+        <h4 className="text-xs font-black text-orange-600 mb-2 flex items-center gap-2">
+          <Package size={14}/> 準備物の運用ルール
+        </h4>
+        <p className="text-[11px] text-orange-800/70 leading-relaxed font-bold">
+          「買う・借りる・持っていく」といった当日会場に必要な<span className="text-orange-600">モノ（現物）</span>を管理します。<br />
+          タスクで作成した資料を「印刷して持参する」場合など、物理的な手配が必要な際はこちらに登録してください。
+        </p>
+      </div>
     </div>
   );
 }
