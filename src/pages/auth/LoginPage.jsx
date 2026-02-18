@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, LogIn, ArrowLeft, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'; 
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from '../../config/firebase';
 
@@ -28,11 +28,22 @@ export default function LoginPage() {
       <div className="absolute top-[-10%] left-[-5%] w-[40rem] h-[40rem] rounded-full bg-blue-100/40 blur-3xl" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[30rem] h-[30rem] rounded-full bg-pink-100/40 blur-3xl" />
       <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.1)] border border-gray-100 p-8 sm:p-12 relative z-10">
+        
         <div className="text-center mb-12">
-          <div className="inline-flex p-5 bg-blue-600 rounded-[2rem] mb-6 text-white shadow-xl shadow-blue-200"><Layers size={32} strokeWidth={2.5}/></div>
+          {/* --- 枠を削除し、ロゴ画像のみを配置 --- */}
+          <div className="flex justify-center mb-6">
+            <img 
+              src="/public/logo.png"  // publicフォルダにある場合のパス
+              alt="STREAM FEST." 
+              className="max-h-24 w-auto object-contain" 
+            />
+          </div>
+          {/* -------------------------------------- */}
+
           <h1 className="text-3xl font-black tracking-tighter text-blue-900 uppercase">STREAM FEST.</h1>
           <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Project Management Portal</p>
         </div>
+
         {!isForgotPassword ? (
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
