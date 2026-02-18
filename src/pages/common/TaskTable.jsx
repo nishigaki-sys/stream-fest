@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ListTodo, Plus, Filter, ExternalLink, CornerDownRight, GitMerge, ChevronRight, ChevronDown } from 'lucide-react';
-import { BRAND_COLORS, TASK_STATUS, CATEGORIES } from '../../constants/appConfig';
+import { BRAND_COLORS, TASK_STATUS, CATEGORIES, CATEGORY_COLORS } from '../../constants/appConfig';
 
 export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) {
   const [filter, setFilter] = useState({ assignee: '', status: '', category: '' });
@@ -128,7 +128,13 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                 return (
                   <tr key={t.id} className={`transition-all cursor-pointer group ${rowBgClass} ${isChild ? 'animate-in slide-in-from-top-1 duration-200' : ''}`} onClick={() => onTaskEdit(t)}>
                     <td className="px-6 py-2">
-                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${isChild ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-[#284db3]'}`}>
+                      <span 
+                        className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md"
+                        style={{ 
+                          backgroundColor: `${CATEGORY_COLORS[t.category] || '#eee'}15`, // 背景は透明度15%
+                          color: CATEGORY_COLORS[t.category] || '#999'                // 文字はそのままの色
+                        }}
+                      >
                         {t.category}
                       </span>
                     </td>

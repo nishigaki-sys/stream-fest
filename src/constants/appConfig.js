@@ -2,15 +2,15 @@
  * アプリケーション全体で使用する定数定義
  */
 
-// UIで使用するブランドカラー
+// UIで使用するブランドカラー（重複を統合）
 export const BRAND_COLORS = { 
   BLUE: '#284db3', 
-  LIGHT_GREEN: '#c2e086', 
-  PINK: '#ffc1bc', 
   GREEN: '#34cc99', 
   YELLOW: '#fef667', 
   RED: '#fd594e', 
-  ORANGE: '#fe9a33' 
+  ORANGE: '#fe9a33',
+  LIGHT_GREEN: '#c2e086', 
+  PINK: '#ffc1bc'
 };
 
 // ユーザーの権限役割
@@ -21,20 +21,34 @@ export const ROLES = {
   SUPPORT: '後援・共催' 
 };
 
-// タスクの進捗ステータス
+// タスクの進捗ステータス（重複を統合し、実用的な4つに絞り込み）
 export const TASK_STATUS = { 
   TODO: '未着手', 
   IN_PROGRESS: '進行中', 
-  PENDING: '確認待ち', 
+  PENDING: '確認待ち', // または '遅延' 
   DONE: '完了' 
+};
+
+// タスク管理の大分類カテゴリ
+export const CATEGORIES = [
+  "企画・全体管理",
+  "コンテンツ・制作",
+  "会場・施工",
+  "運営・ロジ",
+  "集客・顧客管理"
+];
+
+// カテゴリごとの色定義（TaskTableで使用）
+export const CATEGORY_COLORS = {
+  "企画・全体管理": "#284db3",    // ブルー
+  "コンテンツ・制作": "#8b5cf6",  // パープル
+  "会場・施工": "#10b981",       // グリーン
+  "運営・ロジ": "#f59e0b",       // オレンジ
+  "集客・顧客管理": "#ec4899"    // ピンク
 };
 
 // 予算管理のカテゴリ
 export const BUDGET_CATEGORIES = ['会場費', '広報広告費', '制作物費', '運営人件費', '機材備品費', 'その他'];
-
-// タスク管理の工程カテゴリ
-// 追加・編集・削除はこの配列を書き換えることでアプリ全体に反映されます
-export const CATEGORIES = ['①設計', '②準備', '③運営', '④事後'];
 
 // 準備物カテゴリ
 export const ITEM_CATEGORIES = [
