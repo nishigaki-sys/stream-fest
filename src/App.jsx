@@ -185,108 +185,91 @@ export default function App() {
   }
   if (!isLoggedIn) return <LoginPage />;
 
-  // 7. コンテンツレンダリング
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'hq-overview':
-        return (
-          <HQOverview 
-            events={events} tasks={tasks} budgets={budgets} 
-            onEventSelect={(id) => { setSelectedEventId(id); setActiveTab('event-dashboard'); }} 
-            onAddEvent={() => openModal('event', { name: '', location: '' })}
-          />
-        );
-      case 'hq-members':
-        return <HQMemberManagement users={users} events={events} />;
-      case 'event-dashboard':
-        return (
-          <EventDashboard 
-            selectedEvent={selectedEvent}
-            tasks={eventContext.tasks}
-            budgets={eventContext.budgets}
-            supplies={eventContext.supplies}
-            currentUser={currentUser}
-            onTaskClick={(task) => openModal('task', task)}
-            onEditSupplyClick={(item) => openModal('supply', item)}
-            onKanbanLink={() => setActiveTab('kanban')}
-          />
-        );
-      case 'task-list':
-        return (
-          <TaskTable 
-            tasks={eventContext.tasks} 
-            users={users} 
-            onAddTaskClick={(status = "未着手", parentId = null) => 
-              openModal('task', { title: '', status, eventId: selectedEventId, parentId })
-            }
-            onTaskEdit={(task) => openModal('task', task)} 
-          />
-        );
-      case 'kanban':
-        return (
-          <KanbanBoard 
-            tasks={eventContext.tasks} 
-            currentUser={currentUser} 
-            onAddTaskClick={(status) => openModal('task', { title: '', status, eventId: selectedEventId })}
-            onTaskEdit={(task) => openModal('task', task)} 
-            onTaskUpdate={handleInstantTaskUpdate}
-          />
-        );
-      case 'tasks':
-        return <GanttChart tasks={eventContext.tasks} onTaskEdit={(task) => openModal('task', task)} />;
-      case 'budget':
-        return (
-          <BudgetTable 
-            budgets={eventContext.budgets} 
-            onAddBudgetClick={() => openModal('budget', { title: '', planned: 0, actual: 0, eventId: selectedEventId })}
-            onBudgetEdit={(budget) => openModal('budget', budget)}
-          />
-        );
-      case 'supplies':
-        return (
-          <SuppliesList 
-            items={eventContext.supplies} users={users} 
-            onAddItemClick={() => openModal('supply', { name: '', eventId: selectedEventId })}
-            onEditItemClick={(item) => openModal('supply', item)}
-          />
-        );
-      case 'chat':
-        return <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />;
-      case 'event-settings':
-        return (
-            <div className="max-w-2xl bg-white rounded-[2.5rem] border p-8 sm:p-12 animate-in fade-in">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
-                <div className="flex gap-3">
-                  <button onClick={() => openModal('event', selectedEvent)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">基本情報を編集</button>
-                  <button onClick={handleCopyProject} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">コピー</button>
-                  <button onClick={handleDeleteProject} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm">削除</button>
-                </div>
-              </div>
-              <div className="space-y-4 border-t pt-6">
-                <div className="grid grid-cols-3 gap-4">
-                  <span className="text-xs font-black text-gray-400 uppercase">会場</span>
-                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.location || '-'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <span className="text-xs font-black text-gray-400 uppercase">住所</span>
-                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.address || '-'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <span className="text-xs font-black text-gray-400 uppercase">開催期間</span>
-                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.period || '-'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <span className="text-xs font-black text-gray-400 uppercase">主催者</span>
-                  <span className="col-span-2 text-sm font-bold text-gray-700">{selectedEvent?.organizer || '-'}</span>
-                </div>
+  // --- 7. コンテンツレンダリング ---
+const renderContent = () => {
+  switch (activeTab) {
+    case 'hq-overview':
+      return (
+        <HQOverview 
+          events={events} tasks={tasks} budgets={budgets} 
+          onEventSelect={(id) => { setSelectedEventId(id); setActiveTab('event-dashboard'); }} 
+          onAddEvent={() => openModal('event', { name: '', location: '' })}
+        />
+      );
+    case 'hq-members':
+      return <HQMemberManagement users={users} events={events} />;
+    case 'event-dashboard':
+      return (
+        <EventDashboard 
+          selectedEvent={selectedEvent}
+          tasks={eventContext.tasks}
+          budgets={eventContext.budgets}
+          supplies={eventContext.supplies}
+          currentUser={currentUser}
+          onTaskClick={(task) => openModal('task', task)}
+          onEditSupplyClick={(item) => openModal('supply', item)}
+          onKanbanLink={() => setActiveTab('kanban')}
+        />
+      );
+    case 'task-list':
+      return (
+        <TaskTable 
+          tasks={eventContext.tasks} 
+          users={users} 
+          onAddTaskClick={(status = "未着手", parentId = null) => 
+            openModal('task', { title: '', status, eventId: selectedEventId, parentId })
+          }
+          onTaskEdit={(task) => openModal('task', task)} 
+          onTaskUpdate={handleInstantTaskUpdate} // 追加
+        />
+      );
+    case 'kanban':
+      return (
+        <KanbanBoard 
+          tasks={eventContext.tasks} 
+          currentUser={currentUser} 
+          onAddTaskClick={(status) => openModal('task', { title: '', status, eventId: selectedEventId })}
+          onTaskEdit={(task) => openModal('task', task)} 
+          onTaskUpdate={handleInstantTaskUpdate}
+        />
+      );
+    case 'tasks':
+      return <GanttChart tasks={eventContext.tasks} onTaskEdit={(task) => openModal('task', task)} />;
+    case 'budget':
+      return (
+        <BudgetTable 
+          budgets={eventContext.budgets} 
+          onAddBudgetClick={() => openModal('budget', { title: '', planned: 0, actual: 0, eventId: selectedEventId })}
+          onBudgetEdit={(budget) => openModal('budget', budget)}
+        />
+      );
+    case 'supplies':
+      return (
+        <SuppliesList 
+          items={eventContext.supplies} users={users} 
+          onAddItemClick={() => openModal('supply', { name: '', eventId: selectedEventId })}
+          onEditItemClick={(item) => openModal('supply', item)}
+        />
+      );
+    case 'chat':
+      return <ChatView currentUser={currentUser} users={users} selectedEventId={selectedEventId} />;
+    case 'event-settings':
+      return (
+          <div className="max-w-2xl bg-white rounded-[2.5rem] border p-8 sm:p-12 animate-in fade-in">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
+              <div className="flex gap-3">
+                <button onClick={() => openModal('event', selectedEvent)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">基本情報を編集</button>
+                <button onClick={handleCopyProject} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">コピー</button>
+                <button onClick={handleDeleteProject} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm">削除</button>
               </div>
             </div>
-        );
-      default:
-        return <HQOverview events={events} tasks={tasks} budgets={budgets} onEventSelect={(id) => { setSelectedEventId(id); setActiveTab('event-dashboard'); }} />;
-    }
-  };
+          </div>
+      );
+    default:
+      return null;
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50 flex text-gray-900 font-sans relative items-start">

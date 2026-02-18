@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { ListTodo, Plus, Filter, ExternalLink, CornerDownRight, GitMerge, ChevronRight, ChevronDown } from 'lucide-react';
+import { ListTodo, Plus, Filter, ExternalLink, CornerDownRight, GitMerge, ChevronRight, ChevronDown, GripVertical } from 'lucide-react';
 import { BRAND_COLORS, TASK_STATUS, CATEGORIES, CATEGORY_COLORS } from '../../constants/appConfig';
 
-export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) {
+// onTaskUpdate プロップスを追加して、並び替え結果を親に通知できるようにします
+export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit, onTaskUpdate }) {
   const [filter, setFilter] = useState({ assignee: '', status: '', category: '' });
-  
-  // --- 追加：開閉状態を管理するState（展開されている親タスクのIDを保存） ---
   const [expandedRows, setExpandedRows] = useState(new Set());
+  
+  // ドラッグ中の要素のインデックスを保持
+  const [draggedIdx, setDraggedIdx] = useState(null);
 
   const getStatusColor = (s) => {
     switch (s) {
@@ -17,9 +19,8 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
     }
   };
 
-  // --- 追加：開閉を切り替えるハンドラー ---
   const toggleRow = (e, parentId) => {
-    e.stopPropagation(); // 行のクリック（編集）イベントを阻止
+    e.stopPropagation();
     const newExpandedRows = new Set(expandedRows);
     if (newExpandedRows.has(parentId)) {
       newExpandedRows.delete(parentId);
@@ -27,6 +28,44 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
       newExpandedRows.add(parentId);
     }
     setExpandedRows(newExpandedRows);
+  };
+
+  // --- 並び替え用ハンドラー ---
+  const handleDragStart = (e, index) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault(); // これがないとドロップが許可されません
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = async (e, dropIdx) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIdx) return;
+
+    // 1. 表示されている順序（アコーディオン展開済み）で配列をコピー
+    const newList = [...displayTasks];
+    
+    // 2. ドラッグした要素を一旦抜き出し、新しい位置へ挿入
+    const [draggedItem] = newList.splice(draggedIdx, 1);
+    newList.splice(dropIdx, 0, draggedItem);
+
+    // 3. 親コンポーネントの関数(onTaskUpdate)を使ってDBを更新
+    // ここでエラーが出ている場合、App.jsx側の実装が必要です
+    if (onTaskUpdate) {
+      // 負荷を抑えるため、実際に入れ替わったアイテムだけを更新するか、
+      // 全体に新しい index (100, 200, 300...) を振って並び順を確定させます
+      newList.forEach((task, i) => {
+        const newIndex = (i + 1) * 100;
+        // インデックスが変わっているものだけを更新
+        if (task.index !== newIndex) {
+          onTaskUpdate(task.id, { index: newIndex });
+        }
+      });
+    }
+    setDraggedIdx(null);
   };
 
   const displayTasks = useMemo(() => {
@@ -37,32 +76,32 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
       return matchAssignee && matchStatus && matchCategory;
     });
 
-    const parents = filtered.filter(t => !t.parentId);
-    const children = filtered.filter(t => t.parentId);
+    // DBから取得した index プロパティでソート
+    const sortedFiltered = [...filtered].sort((a, b) => (a.index || 0) - (b.index || 0));
+
+    const parents = sortedFiltered.filter(t => !t.parentId);
+    const children = sortedFiltered.filter(t => t.parentId);
     const result = [];
 
     parents.forEach(parent => {
-      // 親タスクに「子タスクを持っているか」の判定フラグを付与
       const hasChildren = children.some(child => child.parentId === parent.id);
       result.push({ ...parent, hasChildren });
 
-      // 【アコーディオンロジック】親が展開されている場合のみ、紐づく子タスクを表示用リストに追加
       if (expandedRows.has(parent.id)) {
         const relatedChildren = children.filter(child => child.parentId === parent.id);
         result.push(...relatedChildren);
       }
     });
 
-    // 孤立した子タスク（親がフィルタ等で見つからない場合）は常に表示
     const orphanChildren = children.filter(child => !parents.find(p => p.id === child.parentId));
     result.push(...orphanChildren);
 
     return result;
-  }, [tasks, filter, expandedRows]); // expandedRows を依存配列に追加
+  }, [tasks, filter, expandedRows]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      {/* 1. フィルタセクション */}
+      {/* 1. フィルタセクション (変更なし) */}
       <div className="bg-white rounded-[1.5rem] border shadow-sm p-6 flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[200px] space-y-2 text-left">
           <label className="text-[10px] font-black text-gray-400 ml-2 flex items-center gap-1"><Filter size={10}/> 担当者</label>
@@ -103,6 +142,8 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
           <table className="w-full text-left border-collapse table-fixed">
             <thead>
               <tr className="border-b">
+                {/* 並び替えグリップ用の列を追加 */}
+                <th className="sticky top-[73px] z-[90] bg-gray-50 px-3 py-3 w-[40px]"></th>
                 <th className="sticky top-[73px] z-[90] bg-gray-50 px-6 py-3 w-[110px] text-[9px] font-black uppercase text-gray-400">カテゴリ</th>
                 <th className="sticky top-[73px] z-[90] bg-gray-50 px-6 py-3 w-auto text-[9px] font-black uppercase text-gray-400 text-left">タスク名</th>
                 <th className="sticky top-[73px] z-[90] bg-gray-50 px-6 py-3 w-[100px] text-[9px] font-black uppercase text-gray-400">担当者</th>
@@ -111,7 +152,7 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {displayTasks.length > 0 ? displayTasks.map(t => {
+              {displayTasks.length > 0 ? displayTasks.map((t, index) => {
                 const isChild = !!t.parentId;
                 const isExpanded = expandedRows.has(t.id);
                 const today = new Date(); today.setHours(0,0,0,0);
@@ -126,25 +167,36 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                 } else { rowBgClass += " hover:bg-blue-50/20"; }
 
                 return (
-                  <tr key={t.id} className={`transition-all cursor-pointer group ${rowBgClass} ${isChild ? 'animate-in slide-in-from-top-1 duration-200' : ''}`} onClick={() => onTaskEdit(t)}>
+                  <tr 
+                    key={t.id} 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, index)}
+                    // ドロップ先を視覚的にわかりやすくするスタイル
+                    className={`transition-all cursor-pointer group ${rowBgClass} ${isChild ? 'animate-in slide-in-from-top-1 duration-200' : ''} ${draggedIdx === index ? 'opacity-20 bg-blue-100' : ''}`} 
+                    onClick={() => onTaskEdit(t)}
+                  >
+                    {/* 並び替え用グリップアイコン */}
+                    <td className="px-3 py-2 text-center">
+                      <GripVertical size={14} className="text-gray-300 group-hover:text-gray-400 transition-colors cursor-grab active:cursor-grabbing" />
+                    </td>
+
                     <td className="px-6 py-2">
                       <span 
                         className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md"
                         style={{ 
-                          backgroundColor: `${CATEGORY_COLORS[t.category] || '#eee'}15`, // 背景は透明度15%
-                          color: CATEGORY_COLORS[t.category] || '#999'                // 文字はそのままの色
+                          backgroundColor: `${CATEGORY_COLORS[t.category] || '#eee'}15`,
+                          color: CATEGORY_COLORS[t.category] || '#999'
                         }}
                       >
                         {t.category}
                       </span>
                     </td>
                     
-                    {/* タスク名セル：子タスクの pl-12 を pl-6 に調整して、アイコン幅で制御します */}
                     <td className={`px-6 py-2 font-bold ${isChild ? 'pl-6 text-gray-500 text-[12px]' : 'text-gray-700 text-sm'}`}>
                       <div className="flex items-center justify-between group/row">
                         <div className="flex items-center">
-                          
-                          {/* --- アイコンエリア：ここを固定幅にしてテキスト位置を揃える --- */}
                           <div className="w-8 flex shrink-0 items-center justify-center">
                             {!isChild && t.hasChildren ? (
                               <button 
@@ -157,12 +209,9 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                               <CornerDownRight size={12} className="text-gray-300 ml-2" />
                             ) : null}
                           </div>
-
-                          {/* タスク名テキスト：ここが常に左揃えになります */}
                           <span className="truncate">{t.title}</span>
                         </div>
 
-                        {/* 子タスク追加ボタン */}
                         {!isChild && (
                           <button
                             onClick={(e) => {
@@ -196,7 +245,7 @@ export default function TaskTable({ tasks, users, onAddTaskClick, onTaskEdit }) 
                   </tr>
                 );
               }) : (
-                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-400 font-bold text-sm">該当するタスクが見つかりません</td></tr>
+                <tr><td colSpan="6" className="px-6 py-10 text-center text-gray-400 font-bold text-sm">該当するタスクが見つかりません</td></tr>
               )}
             </tbody>
           </table>
