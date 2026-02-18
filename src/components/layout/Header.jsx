@@ -8,7 +8,7 @@ import { useFirestoreData } from '../../hooks/useFirestoreData';
  * ヘッダーコンポーネント
  * プロフィールアイコンを正円に変更し、未読通知バッジを追加
  */
-export default function Header({ setIsSidebarOpen, onProfileClick, selectedEventId }) {
+export default function Header({ setIsSidebarOpen, onProfileClick, selectedEventId, searchQuery, setSearchQuery }) {
   const { currentUser } = useAuth();
   
   // 未読チェック用：全メッセージを取得
@@ -40,6 +40,8 @@ export default function Header({ setIsSidebarOpen, onProfileClick, selectedEvent
           <input 
             type="text" 
             placeholder="タスクやメッセージを検索..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent border-none outline-none text-sm w-full font-medium"
           />
         </div>

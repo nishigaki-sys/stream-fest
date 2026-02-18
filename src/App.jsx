@@ -287,8 +287,8 @@ const renderContent = () => {
         <Header 
           title={selectedEvent?.name || '全体俯瞰'} 
           user={currentUser} 
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
+          searchQuery={searchQuery}       // 正しく渡されていることを確認
+          setSearchQuery={setSearchQuery} // 正しく渡されていることを確認
           onMenuClick={() => setIsSidebarOpen(true)} 
           onProfileClick={() => setIsProfileModalOpen(true)}
         />
