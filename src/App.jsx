@@ -3,13 +3,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getFirestore, doc, updateDoc, writeBatch, collection, serverTimestamp } from "firebase/firestore";
 import { useAuth } from './contexts/AuthContext';
 import { useFirestoreData } from './hooks/useFirestoreData';
-import { ROLES } from './constants/appConfig';
+import { ROLES, CATEGORIES } from './constants/appConfig'; // CATEGORIESを追加
 
 // レイアウト・共通コンポーネント
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import CombinedModals from './components/modals/CombinedModals';
-import ProfileModal from './components/modals/ProfileModal'; // 追加
+import ProfileModal from './components/modals/ProfileModal';
 import LoginPage from './pages/auth/LoginPage';
 import EventDashboard from './components/dashboard/EventDashboard';
 
@@ -38,7 +38,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('hq-overview');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // 追加
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalState, setModalState] = useState({ type: null, data: null });
 
@@ -68,6 +68,13 @@ export default function App() {
     return result;
   }, [tasks, selectedEventId, searchQuery]);
 
+  // --- 【修正ポイント】eventContextをApp直下のスコープで定義 ---
+  const eventContext = useMemo(() => ({
+    tasks: filteredTasks,
+    budgets: budgets.filter(b => b.eventId === selectedEventId),
+    supplies: supplies.filter(s => s.eventId === selectedEventId),
+  }), [filteredTasks, budgets, supplies, selectedEventId]);
+
   // 5. ハンドラー関数
   const openModal = (type, data = null) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
@@ -89,8 +96,6 @@ export default function App() {
 
     try {
       const batch = writeBatch(db);
-
-      // ① 新しいプロジェクトの作成
       const newEventRef = doc(collection(db, "events"));
       const newEventData = {
         ...selectedEvent,
@@ -102,7 +107,6 @@ export default function App() {
       delete newEventData.id;
       batch.set(newEventRef, newEventData);
 
-      // ② タスクのコピー
       const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       eventTasks.forEach(task => {
         const newTaskRef = doc(collection(db, "tasks"));
@@ -118,7 +122,6 @@ export default function App() {
         });
       });
 
-      // ③ 準備物のコピー
       const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
       eventSupplies.forEach(supply => {
         const newSupplyRef = doc(collection(db, "supplies"));
@@ -146,16 +149,13 @@ export default function App() {
   // プロジェクトの削除機能
   const handleDeleteProject = async () => {
     if (!selectedEvent) return;
-    
     const confirmFirst = window.confirm(`「${selectedEvent.name}」を削除しますか？\nこの操作は取り消せず、関連する全てのタスク・準備物・予算データも削除されます。`);
     if (!confirmFirst) return;
-    
     const confirmSecond = window.confirm(`本当に削除しますか？最終確認です。`);
     if (!confirmSecond) return;
 
     try {
       const batch = writeBatch(db);
-
       const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
       const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
       const eventBudgets = budgets.filter(b => b.eventId === selectedEventId);
@@ -166,7 +166,6 @@ export default function App() {
       batch.delete(doc(db, "events", selectedEventId));
 
       await batch.commit();
-
       setSelectedEventId(null);
       setActiveTab('hq-overview');
       alert('プロジェクトを削除しました。');
@@ -188,12 +187,6 @@ export default function App() {
 
   // 7. コンテンツレンダリング
   const renderContent = () => {
-    const eventContext = {
-      tasks: filteredTasks,
-      budgets: budgets.filter(b => b.eventId === selectedEventId),
-      supplies: supplies.filter(s => s.eventId === selectedEventId),
-    };
-
     switch (activeTab) {
       case 'hq-overview':
         return (
@@ -221,8 +214,11 @@ export default function App() {
       case 'task-list':
         return (
           <TaskTable 
-            tasks={eventContext.tasks} users={users} 
-            onAddTaskClick={() => openModal('task', { title: '', eventId: selectedEventId })}
+            tasks={eventContext.tasks} 
+            users={users} 
+            onAddTaskClick={(status = "未着手", parentId = null) => 
+              openModal('task', { title: '', status, eventId: selectedEventId, parentId })
+            }
             onTaskEdit={(task) => openModal('task', task)} 
           />
         );
@@ -262,27 +258,11 @@ export default function App() {
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-xl font-black text-gray-800">プロジェクト設定</h3>
                 <div className="flex gap-3">
-                  <button 
-                    onClick={() => openModal('event', selectedEvent)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                  >
-                    基本情報を編集
-                  </button>
-                  <button 
-                    onClick={handleCopyProject}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                  >
-                    コピー
-                  </button>
-                  <button 
-                    onClick={handleDeleteProject}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                  >
-                    削除
-                  </button>
+                  <button onClick={() => openModal('event', selectedEvent)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">基本情報を編集</button>
+                  <button onClick={handleCopyProject} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">コピー</button>
+                  <button onClick={handleDeleteProject} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all shadow-sm">削除</button>
                 </div>
               </div>
-              
               <div className="space-y-4 border-t pt-6">
                 <div className="grid grid-cols-3 gap-4">
                   <span className="text-xs font-black text-gray-400 uppercase">会場</span>
@@ -343,7 +323,8 @@ export default function App() {
         context={{ 
           selectedEventId, 
           users,
-          budgets: budgets.filter(b => b.eventId === selectedEventId)
+          tasks: eventContext.tasks,
+          budgets: eventContext.budgets
         }}
       />
 
