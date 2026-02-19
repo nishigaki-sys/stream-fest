@@ -90,61 +90,104 @@ export default function App() {
 
   // プロジェクトのコピー機能
   const handleCopyProject = async () => {
-    if (!selectedEvent) return;
-    const confirmCopy = window.confirm(`「${selectedEvent.name}」をベースに新しいプロジェクトを作成しますか？\n(タスクと準備物の担当者・ステータスはリセットされます)`);
-    if (!confirmCopy) return;
+  if (!selectedEvent) return;
+  const confirmCopy = window.confirm(`「${selectedEvent.name}」をベースに新しいプロジェクトを作成しますか？\n(タスクと準備物の担当者・ステータスはリセットされ、親子関係は維持されます)`);
+  if (!confirmCopy) return;
 
-    try {
-      const batch = writeBatch(db);
-      const newEventRef = doc(collection(db, "events"));
-      const newEventData = {
-        ...selectedEvent,
-        name: `${selectedEvent.name} (コピー)`,
-        progress: 0,
-        status: '進行中',
-        createdAt: serverTimestamp()
-      };
-      delete newEventData.id;
-      batch.set(newEventRef, newEventData);
+  try {
+    const batch = writeBatch(db);
+    
+    // 1. 新しいイベントの作成
+    const newEventRef = doc(collection(db, "events"));
+    const newEventData = {
+      ...selectedEvent,
+      name: `${selectedEvent.name} (コピー)`,
+      progress: 0,
+      status: '進行中',
+      createdAt: serverTimestamp()
+    };
+    delete newEventData.id;
+    batch.set(newEventRef, newEventData);
 
-      const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
-      eventTasks.forEach(task => {
-        const newTaskRef = doc(collection(db, "tasks"));
-        const { id, ...taskData } = task;
-        batch.set(newTaskRef, {
-          ...taskData,
-          eventId: newEventRef.id,
-          assignee: '',
-          status: '未着手',
-          startDate: '', 
-          dueDate: '',
-          progress: 0
-        });
+    // --- タスクの親子関係を維持するためのマッピング ---
+    const taskIdMap = {}; // { 旧ID: 新Ref }
+
+    // 2. タスクのコピー（2パス処理）
+    const eventTasks = tasks.filter(t => t.eventId === selectedEventId);
+
+    // パス1: 全てのタスクの新しい参照（ID）を先に生成しておく
+    eventTasks.forEach(task => {
+      const newTaskRef = doc(collection(db, "tasks"));
+      taskIdMap[task.id] = newTaskRef;
+    });
+
+    // パス2: データをセット（parentId を新しいIDに書き換える）
+    eventTasks.forEach(task => {
+      const newTaskRef = taskIdMap[task.id];
+      const { id, ...taskData } = task;
+
+      // もしこのタスクが子タスク(parentIdがある)なら、マッピングから新しい親IDを取得する
+      let newParentId = '';
+      if (taskData.parentId && taskIdMap[taskData.parentId]) {
+        newParentId = taskIdMap[taskData.parentId].id;
+      }
+
+      batch.set(newTaskRef, {
+        ...taskData,
+        eventId: newEventRef.id,
+        parentId: newParentId, // 新しい親IDをセット
+        assignee: '',
+        status: '未着手',
+        startDate: taskData.startDate || '', 
+        dueDate: taskData.dueDate || '',
+        progress: 0
       });
+    });
 
-      const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
-      eventSupplies.forEach(supply => {
-        const newSupplyRef = doc(collection(db, "supplies"));
-        const { id, ...supplyData } = supply;
-        batch.set(newSupplyRef, {
-          ...supplyData,
-          eventId: newEventRef.id,
-          status: '未着手',
-          method: '',
-          supplier: '',
-          assignee: ''
-        });
+    // 3. 準備物のコピー
+    const eventSupplies = supplies.filter(s => s.eventId === selectedEventId);
+    eventSupplies.forEach(supply => {
+      const newSupplyRef = doc(collection(db, "supplies"));
+      const { id, ...supplyData } = supply;
+
+      // 準備物が特定のタスクに紐付いている(linkedTaskId)場合も新IDに更新
+      let newLinkedTaskId = '';
+      if (supplyData.linkedTaskId && taskIdMap[supplyData.linkedTaskId]) {
+        newLinkedTaskId = taskIdMap[supplyData.linkedTaskId].id;
+      }
+
+      batch.set(newSupplyRef, {
+        ...supplyData,
+        eventId: newEventRef.id,
+        linkedTaskId: newLinkedTaskId, // 紐づきタスクも新プロジェクト側に更新
+        status: '未着手',
+        method: supplyData.method || '',
+        supplier: supplyData.supplier || '',
+        assignee: ''
       });
+    });
 
-      await batch.commit();
-      setSelectedEventId(newEventRef.id);
-      setActiveTab('event-dashboard');
-      alert('プロジェクトをコピーしました。');
-    } catch (err) {
-      console.error("Copy Error:", err);
-      alert('コピーに失敗しました。');
-    }
-  };
+    // 4. 予算のコピー（必要であれば追加）
+    const eventBudgets = budgets.filter(b => b.eventId === selectedEventId);
+    eventBudgets.forEach(budget => {
+      const newBudgetRef = doc(collection(db, "budgets"));
+      const { id, ...budgetData } = budget;
+      batch.set(newBudgetRef, {
+        ...budgetData,
+        eventId: newEventRef.id,
+        actual: 0 // 執行額はリセット
+      });
+    });
+
+    await batch.commit();
+    setSelectedEventId(newEventRef.id);
+    setActiveTab('event-dashboard');
+    alert('プロジェクトを親子関係を維持してコピーしました。');
+  } catch (err) {
+    console.error("Copy Error:", err);
+    alert('コピーに失敗しました。');
+  }
+};
 
   // プロジェクトの削除機能
   const handleDeleteProject = async () => {
